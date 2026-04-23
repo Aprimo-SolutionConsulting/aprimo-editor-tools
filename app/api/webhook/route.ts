@@ -34,23 +34,8 @@ async function verifySignature(request: NextRequest, rawBody: string): Promise<b
   return mismatch === 0
 }
 
-function isAprimoOrigin(request: NextRequest): boolean {
-  const origin = request.headers.get("origin") ?? request.headers.get("referer") ?? ""
-  try {
-    const { hostname } = new URL(origin)
-    return hostname === "aprimo.com" || hostname.endsWith(".aprimo.com")
-  } catch {
-    return false
-  }
-}
-
 export async function POST(request: NextRequest) {
   try {
-    if (!isAprimoOrigin(request)) {
-      console.warn("[webhook] Rejected request from non-Aprimo origin")
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-    }
-
     const rawBody = await request.text()
 
     const isValid = await verifySignature(request, rawBody)
