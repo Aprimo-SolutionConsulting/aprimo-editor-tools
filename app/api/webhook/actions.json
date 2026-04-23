@@ -1,6 +1,5 @@
 {
-  "asset-approved": "https://example.com/approved",
-  "asset-rejected": "https://example.com/rejected",
-  "asset-published": "https://example.com/published",
-  "basketexample": "http://localhost:3000/basket-example"
+  "basketexamplelocal": "http://localhost:3000/basket-example",
+  "basketexample": "https://aprimo-editor-tools.vercel.app/basket-example"
+  
 }
