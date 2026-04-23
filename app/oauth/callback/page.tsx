@@ -1,13 +1,13 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import { useAprimo } from "@/context/aprimo-context"
 import { exchangeCodeForToken } from "@/lib/pkce"
 
-export default function OAuthCallbackPage() {
+function OAuthCallbackContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const { setConnection } = useAprimo()
@@ -79,5 +79,13 @@ export default function OAuthCallbackPage() {
         <p className="mt-4 text-muted-foreground">Completing authentication...</p>
       </div>
     </div>
+  )
+}
+
+export default function OAuthCallbackPage() {
+  return (
+    <Suspense>
+      <OAuthCallbackContent />
+    </Suspense>
   )
 }

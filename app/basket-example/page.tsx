@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useState, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import { useAprimo } from "@/context/aprimo-context"
 import { supabase } from "@/lib/supabase"
@@ -123,7 +123,7 @@ async function exportToExcel(records: AprimoRecord[], extraFields: string[], fie
   URL.revokeObjectURL(url)
 }
 
-export default function BasketExamplePage() {
+function BasketExampleContent() {
   const searchParams = useSearchParams()
   const requestId = searchParams.get("requestId")
   const { client, isConnected } = useAprimo()
@@ -446,5 +446,13 @@ export default function BasketExamplePage() {
         </>
       )}
     </main>
+  )
+}
+
+export default function BasketExamplePage() {
+  return (
+    <Suspense>
+      <BasketExampleContent />
+    </Suspense>
   )
 }
