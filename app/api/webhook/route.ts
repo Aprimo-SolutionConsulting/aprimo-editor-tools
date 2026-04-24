@@ -67,24 +67,32 @@ export async function POST(request: NextRequest) {
     }
 
     const { recordIds } = payload as { recordIds?: string }
+    const mode = request.nextUrl.searchParams.get("mode")
     let finalUrl = returnUrl
 
     if (recordIds) {
-      const requestId = crypto.randomUUID()
-      const recordList = recordIds.split(";").map((id) => id.trim()).filter(Boolean)
+      if (mode === "singleitem") {
+        const recordId = recordIds.split(";")[0].trim()
+        const url = new URL(returnUrl)
+        url.searchParams.set("record", recordId)
+        finalUrl = url.toString()
+      } else {
+        const requestId = crypto.randomUUID()
+        const recordList = recordIds.split(";").map((id) => id.trim()).filter(Boolean)
 
-      const { error } = await supabase
-        .from("requested_records")
-        .insert({ requestId, recordList })
+        const { error } = await supabase
+          .from("requested_records")
+          .insert({ requestId, recordList })
 
-      if (error) {
-        console.error("[webhook] Supabase insert error:", error)
-        return NextResponse.json({ error: "Failed to save records" }, { status: 500 })
+        if (error) {
+          console.error("[webhook] Supabase insert error:", error)
+          return NextResponse.json({ error: "Failed to save records" }, { status: 500 })
+        }
+
+        const url = new URL(returnUrl)
+        url.searchParams.set("requestId", requestId)
+        finalUrl = url.toString()
       }
-
-      const url = new URL(returnUrl)
-      url.searchParams.set("requestId", requestId)
-      finalUrl = url.toString()
     }
 
     return NextResponse.json({ url: finalUrl }, { status: 200 })
