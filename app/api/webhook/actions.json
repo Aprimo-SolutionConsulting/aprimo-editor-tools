@@ -1,5 +1,4 @@
 {
-  "basketexamplelocal": "http://localhost:3000/basket-example",
-  "basketexample": "https://aprimo-editor-tools.vercel.app/basket-example"
-  
+  "basketexamplelocal": "http://localhost:3000/my-basket",
+  "basketexample": "https://aprimo-editor-tools.vercel.app/my-basket"
 }
