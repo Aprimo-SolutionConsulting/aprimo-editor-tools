@@ -34,8 +34,8 @@ function OAuthCallbackContent() {
 
       const environment = sessionStorage.getItem("pkce_environment")
       const clientId = sessionStorage.getItem("pkce_client_id")
-      const codeVerifier = sessionStorage.getItem("pkce_code_verifier")
       const clientSecret = sessionStorage.getItem("pkce_client_secret") ?? undefined
+      const codeVerifier = sessionStorage.getItem("pkce_code_verifier")
 
       if (!environment || !clientId || !codeVerifier) {
         toast.error("Missing session data — please try connecting again")
@@ -56,8 +56,8 @@ function OAuthCallbackContent() {
 
         sessionStorage.removeItem("pkce_environment")
         sessionStorage.removeItem("pkce_client_id")
-        sessionStorage.removeItem("pkce_code_verifier")
         sessionStorage.removeItem("pkce_client_secret")
+        sessionStorage.removeItem("pkce_code_verifier")
         sessionStorage.removeItem("pkce_return_url")
 
         toast.success("Connected!")

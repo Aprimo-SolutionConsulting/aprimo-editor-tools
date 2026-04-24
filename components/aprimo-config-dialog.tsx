@@ -58,8 +58,8 @@ export function AprimoConfigDialog() {
 
     const env = localStorage.getItem("aprimo_environment")
     const cid = localStorage.getItem("aprimo_client_id")
-    const secret = localStorage.getItem("aprimo_client_secret")
-    if (!env || !cid || !secret) {
+    const secret = localStorage.getItem("aprimo_client_secret") ?? ""
+    if (!env || !cid) {
       openWithCurrentValues()
     } else {
       startOAuth(env, cid, secret)
@@ -121,7 +121,7 @@ export function AprimoConfigDialog() {
         </div>
         <DialogFooter>
           <Button
-            disabled={!environment.trim() || !clientId.trim() || !clientSecret.trim()}
+            disabled={!environment.trim() || !clientId.trim()}
             onClick={handleConnect}
           >
             Connect

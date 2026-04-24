@@ -18,12 +18,12 @@ export function Navbar() {
           </Link>
 
           <div className="flex items-center gap-6">
-            <Link 
-              href="/" 
+            <button
+              onClick={() => window.dispatchEvent(new Event("aprimo:open-config"))}
               className="text-muted-foreground hover:text-foreground transition-colors"
             >
               Connect
-            </Link>
+            </button>
             <Link 
               href="/getting-started" 
               className="text-muted-foreground hover:text-foreground transition-colors"

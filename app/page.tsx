@@ -1,13 +1,49 @@
+"use client"
+
 import { Navbar } from "@/components/navbar"
-import { ConnectSection } from "@/components/connect-section"
 import { Footer } from "@/components/footer"
+import { Button } from "@/components/ui/button"
+import { ShoppingBasket } from "lucide-react"
+import Link from "next/link"
+import { useAprimo } from "@/context/aprimo-context"
 
 export default function Home() {
+  const { isConnected } = useAprimo()
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Navbar />
-      <main className="flex-1">
-        <ConnectSection />
+      <main className="flex-1 flex flex-col items-center justify-center px-4">
+        <div className="max-w-2xl w-full text-center space-y-6">
+          <h1 className="text-4xl font-bold tracking-tight">Aprimo Editor Tools</h1>
+          <p className="text-lg text-muted-foreground">
+            {isConnected
+              ? "You're connected. Choose a tool below to get started."
+              : "Connect to your Aprimo environment to get started."}
+          </p>
+          {!isConnected && (
+            <Button
+              onClick={() => window.dispatchEvent(new Event("aprimo:open-config"))}
+            >
+              Connect to Aprimo
+            </Button>
+          )}
+          {isConnected && (
+            <div className="grid gap-4 sm:grid-cols-1">
+              <Link href="/my-basket">
+                <div className="border border-border rounded-lg p-6 text-left hover:bg-muted/50 transition-colors cursor-pointer">
+                  <div className="flex items-center gap-3 mb-2">
+                    <ShoppingBasket className="h-5 w-5 text-primary" />
+                    <h2 className="text-lg font-semibold">My Basket</h2>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    View and export records from your Aprimo basket with configurable field columns.
+                  </p>
+                </div>
+              </Link>
+            </div>
+          )}
+        </div>
       </main>
       <Footer />
     </div>
