@@ -83,6 +83,7 @@ function getFieldValue(record: AprimoRecord, fieldName: string, ctx?: FieldValue
       .map((id) => {
         const node = ctx?.classificationsById?.get(id)
         if (!node) return id
+        if (ctx?.selectedLanguageId === "__system__") return node.name || id
         const langLabel = ctx?.selectedLanguageId
           ? node.labels?.find((l) => l.languageId === ctx.selectedLanguageId)?.value
           : undefined
@@ -93,7 +94,12 @@ function getFieldValue(record: AprimoRecord, fieldName: string, ctx?: FieldValue
   if (field.dataType === "OptionList" && Array.isArray(lv.values)) {
     const items = ctx?.optionItemsByField?.get(fieldName)
     return lv.values
-      .map((id) => items?.find((item) => item.id === id)?.label || id)
+      .map((id) => {
+        const item = items?.find((item) => item.id === id)
+        if (!item) return id
+        if (ctx?.selectedLanguageId === "__system__") return item.name || id
+        return item.label || id
+      })
       .join(", ")
   }
   if (Array.isArray(lv.values)) return lv.values.join(", ")
@@ -209,7 +215,7 @@ function BasketExampleContent() {
 
     async function loadClassifications() {
       const all: ClassificationNode[] = []
-      for await (const result of client!.classifications.getPaged()) {
+      for await (const result of client!.classifications.getPaged(undefined, undefined, "*")) {
         if (!result.ok) break
         all.push(...(result.data?.items ?? []) as unknown as ClassificationNode[])
       }

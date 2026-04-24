@@ -45,6 +45,7 @@ export function LanguagePicker() {
         <SelectValue placeholder="Language" />
       </SelectTrigger>
       <SelectContent>
+        <SelectItem value="__system__" className="text-xs">System Name</SelectItem>
         {languages.map((lang) => (
           <SelectItem key={lang.id} value={lang.id} className="text-xs">
             {lang.name}
