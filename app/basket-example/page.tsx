@@ -49,17 +49,45 @@ type FieldDef = {
   name: string
   label: string
   dataType: string
+  rootId?: string
 }
 
-function getFieldValue(record: AprimoRecord, fieldName: string): string {
+type ClassificationNode = {
+  id: string
+  name: string
+  labelPath: string
+  parentId?: string
+}
+
+function getClassificationsForRoot(rootId: string, byId: Map<string, ClassificationNode>): ClassificationNode[] {
+  const result: ClassificationNode[] = []
+  const queue = [rootId]
+  while (queue.length) {
+    const parentId = queue.shift()!
+    for (const node of byId.values()) {
+      if (node.parentId === parentId) {
+        result.push(node)
+        queue.push(node.id)
+      }
+    }
+  }
+  return result
+}
+
+function getFieldValue(record: AprimoRecord, fieldName: string, classificationsById?: Map<string, ClassificationNode>): string {
   const field = record._embedded?.fields?.items?.find((f) => f.fieldName === fieldName)
   if (!field?.localizedValues?.[0]) return ""
   const lv = field.localizedValues[0]
+  if (field.dataType === "ClassificationList" && Array.isArray(lv.values)) {
+    return lv.values
+      .map((id) => classificationsById?.get(id)?.labelPath || classificationsById?.get(id)?.name || id)
+      .join(", ")
+  }
   if (Array.isArray(lv.values)) return lv.values.join(", ")
   return lv.value ?? ""
 }
 
-async function exportToExcel(records: AprimoRecord[], extraFields: string[], fieldDefs: FieldDef[]) {
+async function exportToExcel(records: AprimoRecord[], extraFields: string[], fieldDefs: FieldDef[], classificationsById: Map<string, ClassificationNode>) {
   const labelFor = (name: string) => fieldDefs.find((d) => d.name === name)?.label ?? name
 
   const workbook = new ExcelJS.Workbook()
@@ -96,11 +124,11 @@ async function exportToExcel(records: AprimoRecord[], extraFields: string[], fie
     const row = worksheet.getRow(rowNum)
     row.height = ROW_HEIGHT
     row.getCell("id").value = record.id
-    row.getCell("assetTitle").value = getFieldValue(record, "_PMAssetTitle")
+    row.getCell("assetTitle").value = getFieldValue(record, "_PMAssetTitle", classificationsById)
     row.getCell("contentType").value = record.contentType ?? ""
     row.getCell("status").value = record.status ?? ""
     for (const field of extraFields) {
-      row.getCell(field).value = getFieldValue(record, field)
+      row.getCell(field).value = getFieldValue(record, field, classificationsById)
     }
     row.commit()
 
@@ -136,6 +164,7 @@ function BasketExampleContent() {
   const [error, setError] = useState<string | null>(null)
 
   const [fieldDefs, setFieldDefs] = useState<FieldDef[]>([])
+  const [classificationsById, setClassificationsById] = useState<Map<string, ClassificationNode>>(new Map())
   const [selectedFields, setSelectedFields] = useState<Set<string>>(new Set())
   const [tableFields, setTableFields] = useState<string[]>([])
   const [panelOpen, setPanelOpen] = useState(false)
@@ -157,7 +186,18 @@ function BasketExampleContent() {
           .sort((a, b) => (a.label ?? a.name).localeCompare(b.label ?? b.name))
       )
     }
+
+    async function loadClassifications() {
+      const all: ClassificationNode[] = []
+      for await (const result of client!.classifications.getPaged()) {
+        if (!result.ok) break
+        all.push(...(result.data?.items ?? []) as unknown as ClassificationNode[])
+      }
+      setClassificationsById(new Map(all.map((c) => [c.id, c])))
+    }
+
     loadFieldDefs()
+    loadClassifications()
   }, [isConnected, client])
 
   const fetchRecords = useCallback(async (ids: string[], fields: string[]) => {
@@ -240,7 +280,7 @@ function BasketExampleContent() {
       const fields = ["_PMAssetTitle", ...Array.from(selectedFields).filter((f) => f !== "_PMAssetTitle")]
       const fetched = await fetchRecords(recordIds, fields)
       setRecords(fetched)
-      await exportToExcel(fetched, fields, fieldDefs)
+      await exportToExcel(fetched, fields, fieldDefs, classificationsById)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Export failed")
     } finally {
@@ -313,6 +353,16 @@ function BasketExampleContent() {
                     setError(null)
                     try {
                       const fetched = await fetchRecords(recordIds, fields)
+                      const classificationFieldDefs = fieldDefs.filter(
+                        (d) => selectedFields.has(d.name) && d.dataType === "ClassificationList"
+                      )
+                      if (classificationFieldDefs.length > 0) {
+                        console.log("[ClassificationList] field definitions:", classificationFieldDefs)
+                        for (const def of classificationFieldDefs) {
+                          const values = getClassificationsForRoot(def.rootId!, classificationsById)
+                          console.log(`[ClassificationList] values for "${def.name}" (rootId: ${def.rootId}):`, values)
+                        }
+                      }
                       setRecords(fetched)
                     } catch (err) {
                       setError(err instanceof Error ? err.message : "Reload failed")
@@ -403,11 +453,11 @@ function BasketExampleContent() {
                         : <div className="w-16 h-16 bg-muted rounded" />}
                     </td>
                     <td className="py-2 pr-4 font-mono text-xs">{record.id}</td>
-                    <td className="py-2 pr-4">{getFieldValue(record, "_PMAssetTitle")}</td>
+                    <td className="py-2 pr-4">{getFieldValue(record, "_PMAssetTitle", classificationsById)}</td>
                     <td className="py-2 pr-4">{record.contentType ?? "-"}</td>
                     <td className="py-2 pr-4">{record.status ?? "-"}</td>
                     {tableFields.map((f) => (
-                      <td key={f} className="py-2 pr-4">{getFieldValue(record, f) || "-"}</td>
+                      <td key={f} className="py-2 pr-4">{getFieldValue(record, f, classificationsById) || "-"}</td>
                     ))}
                   </tr>
                 ))}
@@ -417,7 +467,7 @@ function BasketExampleContent() {
             <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
               {records.map((record) => {
                 const thumb = gridShowPreview ? getPreviewUri(record) ?? getThumbnailUri(record) : getThumbnailUri(record)
-                const title = getFieldValue(record, "_PMAssetTitle")
+                const title = getFieldValue(record, "_PMAssetTitle", classificationsById)
                 return (
                   <div key={record.id} className="border rounded-lg overflow-hidden">
                     {thumb
@@ -428,7 +478,7 @@ function BasketExampleContent() {
                       {record.contentType && <p className="text-xs text-muted-foreground">{record.contentType}</p>}
                       {record.status && <p className="text-xs text-muted-foreground">{record.status}</p>}
                       {tableFields.map((f) => {
-                        const value = getFieldValue(record, f)
+                        const value = getFieldValue(record, f, classificationsById)
                         if (!value) return null
                         return (
                           <p key={f} className="text-xs text-muted-foreground">
