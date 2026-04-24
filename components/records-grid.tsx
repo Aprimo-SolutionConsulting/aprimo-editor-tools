@@ -48,23 +48,23 @@ interface RecordsGridProps {
   fieldDefs: FieldDef[]
   ctx: FieldValueContext
   showPreview: boolean
+  showContentType: boolean
+  showStatus: boolean
 }
 
-export function RecordsGrid({ records, tableFields, fieldDefs, ctx, showPreview }: RecordsGridProps) {
+export function RecordsGrid({ records, tableFields, fieldDefs, ctx, showPreview, showContentType, showStatus }: RecordsGridProps) {
   return (
     <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
       {records.map((record) => {
         const thumb = showPreview ? getPreviewUri(record) ?? getThumbnailUri(record) : getThumbnailUri(record)
-        const title = getFieldValue(record, "_PMAssetTitle", ctx)
         return (
           <div key={record.id} className="border rounded-lg overflow-hidden">
             {thumb
               ? <img src={thumb} alt="" className="w-full aspect-video object-cover" />
               : <div className="w-full aspect-video bg-muted" />}
             <div className="p-2 space-y-0.5">
-              {title && <p className="text-xs font-medium">{title}</p>}
-              {record.contentType && <p className="text-xs text-muted-foreground">{record.contentType}</p>}
-              {record.status && <p className="text-xs text-muted-foreground">{record.status}</p>}
+              {showContentType && record.contentType && <p className="text-xs text-muted-foreground">{record.contentType}</p>}
+              {showStatus && record.status && <p className="text-xs text-muted-foreground">{record.status}</p>}
               {tableFields.map((f) => {
                 const value = getFieldValue(record, f, ctx)
                 if (!value) return null

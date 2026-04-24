@@ -52,7 +52,6 @@ export function RecordsTable({ records, tableFields, fieldDefs, ctx }: RecordsTa
         <tr className="border-b text-left">
           <th className="pb-2 pr-4 font-medium w-20"></th>
           <th className="pb-2 pr-4 font-medium">ID</th>
-          <th className="pb-2 pr-4 font-medium">Asset Title</th>
           <th className="pb-2 pr-4 font-medium">Content Type</th>
           <th className="pb-2 pr-4 font-medium">Status</th>
           {tableFields.map((f) => (
@@ -71,7 +70,6 @@ export function RecordsTable({ records, tableFields, fieldDefs, ctx }: RecordsTa
                 : <div className="w-16 h-16 bg-muted rounded" />}
             </td>
             <td className="py-2 pr-4 font-mono text-xs">{record.id}</td>
-            <td className="py-2 pr-4">{getFieldValue(record, "_PMAssetTitle", ctx)}</td>
             <td className="py-2 pr-4">{record.contentType ?? "-"}</td>
             <td className="py-2 pr-4">{record.status ?? "-"}</td>
             {tableFields.map((f) => (

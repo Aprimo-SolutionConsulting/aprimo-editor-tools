@@ -51,7 +51,6 @@ export async function exportToExcel(
   worksheet.columns = [
     { header: "", key: "thumb", width: 22 },
     { header: "ID", key: "id", width: 36 },
-    { header: "Asset Title", key: "assetTitle", width: 30 },
     { header: "Content Type", key: "contentType", width: 20 },
     { header: "Status", key: "status", width: 15 },
     ...extraFields.map((f) => ({ header: labelFor(f), key: f, width: 20 })),
@@ -79,7 +78,6 @@ export async function exportToExcel(
     const row = worksheet.getRow(rowNum)
     row.height = ROW_HEIGHT
     row.getCell("id").value = record.id
-    row.getCell("assetTitle").value = getFieldValue(record, "_PMAssetTitle", ctx)
     row.getCell("contentType").value = record.contentType ?? ""
     row.getCell("status").value = record.status ?? ""
     for (const field of extraFields) {

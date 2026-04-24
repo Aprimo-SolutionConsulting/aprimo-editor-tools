@@ -32,6 +32,8 @@ function BasketExampleContent() {
   const [tableFields, setTableFields] = useState<string[]>([])
   const [viewMode, setViewMode] = useState<"table" | "grid">("table")
   const [gridShowPreview, setGridShowPreview] = useState(false)
+  const [gridShowContentType, setGridShowContentType] = useState(true)
+  const [gridShowStatus, setGridShowStatus] = useState(true)
 
   useEffect(() => {
     if (!isConnected || !client) return
@@ -120,7 +122,7 @@ function BasketExampleContent() {
       await supabase.from("requested_records").delete().eq("requestId", requestId)
 
       try {
-        const fetched = await fetchRecords(row.recordList, ["_PMAssetTitle"])
+        const fetched = await fetchRecords(row.recordList, [])
         setRecords(fetched)
       } catch (err) {
         setError(err instanceof Error ? err.message : "Search failed")
@@ -145,7 +147,7 @@ function BasketExampleContent() {
     setExporting(true)
     setError(null)
     try {
-      const fields = ["_PMAssetTitle", ...Array.from(selectedFields).filter((f) => f !== "_PMAssetTitle")]
+      const fields = Array.from(selectedFields)
       const fetched = await fetchRecords(recordIds, fields)
       setRecords(fetched)
       await exportToExcel(fetched, fields, fieldDefs, { classificationsById, optionItemsByField, selectedLanguageId })
@@ -197,14 +199,32 @@ function BasketExampleContent() {
             </p>
             <div className="flex items-center gap-2">
               {viewMode === "grid" && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-xs px-2"
-                  onClick={() => setGridShowPreview((v) => !v)}
-                >
-                  {gridShowPreview ? "Thumbnail" : "Preview"}
-                </Button>
+                <>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs px-2"
+                    onClick={() => setGridShowPreview((v) => !v)}
+                  >
+                    {gridShowPreview ? "Thumbnail" : "Preview"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={gridShowContentType ? "secondary" : "outline"}
+                    className="h-7 text-xs px-2"
+                    onClick={() => setGridShowContentType((v) => !v)}
+                  >
+                    Content Type
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={gridShowStatus ? "secondary" : "outline"}
+                    className="h-7 text-xs px-2"
+                    onClick={() => setGridShowStatus((v) => !v)}
+                  >
+                    Status
+                  </Button>
+                </>
               )}
               <div className="flex items-center gap-1 border rounded-md p-0.5">
                 <Button
@@ -229,7 +249,7 @@ function BasketExampleContent() {
 
           {viewMode === "table"
             ? <RecordsTable records={records} tableFields={tableFields} fieldDefs={fieldDefs} ctx={ctx} />
-            : <RecordsGrid records={records} tableFields={tableFields} fieldDefs={fieldDefs} ctx={ctx} showPreview={gridShowPreview} />
+            : <RecordsGrid records={records} tableFields={tableFields} fieldDefs={fieldDefs} ctx={ctx} showPreview={gridShowPreview} showContentType={gridShowContentType} showStatus={gridShowStatus} />
           }
         </>
       )}

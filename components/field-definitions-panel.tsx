@@ -47,7 +47,7 @@ export function FieldDefinitionsPanel({
   ).sort(([a], [b]) => a.localeCompare(b))
 
   async function handleAddToTable() {
-    const fields = ["_PMAssetTitle", ...Array.from(selectedFields).filter((f) => f !== "_PMAssetTitle")]
+    const fields = Array.from(selectedFields)
     setTableFields(Array.from(selectedFields))
     setError(null)
     try {
