@@ -5,36 +5,11 @@ import { useSearchParams } from "next/navigation"
 import { useAprimo } from "@/context/aprimo-context"
 import { supabase } from "@/lib/supabase"
 import { Expander } from "aprimo-js"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Label } from "@/components/ui/label"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
-import { ChevronDown, ChevronUp, LayoutGrid, List } from "lucide-react"
+import { LayoutGrid, List } from "lucide-react"
+import { FieldDefinitionsPanel } from "@/components/field-definitions-panel"
 import ExcelJS from "exceljs"
-
-type AprimoField = {
-  fieldName: string
-  dataType?: string
-  localizedValues?: Array<{ value?: string; values?: string[] }>
-}
-
-type AprimoRecord = {
-  id: string
-  title?: string | null
-  contentType?: string
-  status?: string
-  _embedded?: {
-    fields?: { items?: AprimoField[] }
-    masterfilelatestversion?: {
-      _embedded?: {
-        thumbnail?: { uri?: string }
-        preview?: { uri?: string }
-      }
-    }
-  }
-  [key: string]: unknown
-}
+import type { AprimoField, AprimoRecord, OptionItem, FieldDef, ClassificationNode, FieldValueContext } from "@/models/aprimo"
 
 function getThumbnailUri(record: AprimoRecord): string | undefined {
   return record._embedded?.masterfilelatestversion?._embedded?.thumbnail?.uri
@@ -42,36 +17,6 @@ function getThumbnailUri(record: AprimoRecord): string | undefined {
 
 function getPreviewUri(record: AprimoRecord): string | undefined {
   return record._embedded?.masterfilelatestversion?._embedded?.preview?.uri
-}
-
-type OptionItem = {
-  id: string
-  name: string
-  label: string
-  labels: Array<{ languageId: string; value: string }>
-}
-
-type FieldDef = {
-  id: string
-  name: string
-  label: string
-  dataType: string
-  rootId?: string
-  items?: OptionItem[]
-}
-
-type ClassificationNode = {
-  id: string
-  name: string
-  labelPath: string
-  parentId?: string
-  labels?: Array<{ languageId: string; value: string }>
-}
-
-type FieldValueContext = {
-  classificationsById?: Map<string, ClassificationNode>
-  optionItemsByField?: Map<string, OptionItem[]>
-  selectedLanguageId?: string | null
 }
 
 function getFieldValue(record: AprimoRecord, fieldName: string, ctx?: FieldValueContext): string {
@@ -187,11 +132,9 @@ function BasketExampleContent() {
   const [optionItemsByField, setOptionItemsByField] = useState<Map<string, OptionItem[]>>(new Map())
   const [selectedFields, setSelectedFields] = useState<Set<string>>(new Set())
   const [tableFields, setTableFields] = useState<string[]>([])
-  const [panelOpen, setPanelOpen] = useState(false)
   const [viewMode, setViewMode] = useState<"table" | "grid">("table")
   const [gridShowPreview, setGridShowPreview] = useState(false)
-
-  useEffect(() => {
+useEffect(() => {
     if (!isConnected || !client) return
 
     async function loadFieldDefs() {
@@ -327,79 +270,18 @@ function BasketExampleContent() {
     <main className="p-8">
       <h1 className="text-2xl font-bold mb-4">Basket Example</h1>
 
-      {fieldDefs.length > 0 && (
-        <Collapsible open={panelOpen} onOpenChange={setPanelOpen} className="mb-6 border rounded-lg print:hidden">
-          <CollapsibleTrigger className="flex w-full items-center justify-between px-4 py-3 text-sm font-medium">
-            Field Definitions ({fieldDefs.length})
-            {panelOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <ScrollArea className="h-64 border-t px-4 py-3">
-              {Object.entries(
-                fieldDefs.reduce<Record<string, FieldDef[]>>((groups, def) => {
-                  const key = def.dataType ?? "Other"
-                  ;(groups[key] ??= []).push(def)
-                  return groups
-                }, {})
-              )
-                .sort(([a], [b]) => a.localeCompare(b))
-                .map(([dataType, defs]) => (
-                  <div key={dataType} className="mb-4">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                      {dataType}
-                    </p>
-                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                      {defs.map((def) => (
-                        <div key={def.id} className="flex items-center gap-2">
-                          <Checkbox
-                            id={def.id}
-                            checked={selectedFields.has(def.name)}
-                            onCheckedChange={() => toggleField(def.name)}
-                          />
-                          <Label htmlFor={def.id} className="text-xs cursor-pointer truncate" title={def.name}>
-                            {def.label || def.name}
-                          </Label>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-            </ScrollArea>
-            <div className="border-t px-4 py-3 flex items-center justify-between gap-2">
-              <p className="text-xs text-muted-foreground">
-                {selectedFields.size} field{selectedFields.size !== 1 ? "s" : ""} selected
-              </p>
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={async () => {
-                    const fields = ["_PMAssetTitle", ...Array.from(selectedFields).filter((f) => f !== "_PMAssetTitle")]
-                    setTableFields(Array.from(selectedFields))
-                    setError(null)
-                    try {
-                      const fetched = await fetchRecords(recordIds, fields)
-                      setRecords(fetched)
-                    } catch (err) {
-                      setError(err instanceof Error ? err.message : "Reload failed")
-                    }
-                  }}
-                  disabled={!selectedFields.size || !recordIds.length}
-                >
-                  Add to Table
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={handleFetchAndExport}
-                  disabled={exporting || !recordIds.length}
-                >
-                  {exporting ? "Exporting…" : "Fetch & Export to Excel"}
-                </Button>
-              </div>
-            </div>
-          </CollapsibleContent>
-        </Collapsible>
-      )}
+      <FieldDefinitionsPanel
+        fieldDefs={fieldDefs}
+        selectedFields={selectedFields}
+        toggleField={toggleField}
+        recordIds={recordIds}
+        fetchRecords={fetchRecords}
+        setRecords={setRecords}
+        setTableFields={setTableFields}
+        setError={setError}
+        exporting={exporting}
+        onExport={handleFetchAndExport}
+      />
 
       {loading && <p className="text-sm text-muted-foreground">Loading records...</p>}
 
@@ -414,14 +296,16 @@ function BasketExampleContent() {
             </p>
             <div className="flex items-center gap-2">
               {viewMode === "grid" && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-xs px-2"
-                  onClick={() => setGridShowPreview((v) => !v)}
-                >
-                  {gridShowPreview ? "Thumbnail" : "Preview"}
-                </Button>
+                <>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs px-2"
+                    onClick={() => setGridShowPreview((v) => !v)}
+                  >
+                    {gridShowPreview ? "Thumbnail" : "Preview"}
+                  </Button>
+                </>
               )}
               <div className="flex items-center gap-1 border rounded-md p-0.5">
                 <Button
