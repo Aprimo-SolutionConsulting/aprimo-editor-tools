@@ -3,6 +3,7 @@
 import { Settings } from "lucide-react"
 import { useAprimo } from "@/context/aprimo-context"
 import { Button } from "@/components/ui/button"
+import { LanguagePicker } from "@/components/language-picker"
 
 export function AprimoSettingsBar() {
   const { connection, isConnected } = useAprimo()
@@ -14,6 +15,7 @@ export function AprimoSettingsBar() {
           {connection.environment}
         </span>
       )}
+      <LanguagePicker />
       <Button
         size="sm"
         variant="ghost"

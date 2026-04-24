@@ -44,12 +44,20 @@ function getPreviewUri(record: AprimoRecord): string | undefined {
   return record._embedded?.masterfilelatestversion?._embedded?.preview?.uri
 }
 
+type OptionItem = {
+  id: string
+  name: string
+  label: string
+  labels: Array<{ languageId: string; value: string }>
+}
+
 type FieldDef = {
   id: string
   name: string
   label: string
   dataType: string
   rootId?: string
+  items?: OptionItem[]
 }
 
 type ClassificationNode = {
@@ -57,37 +65,42 @@ type ClassificationNode = {
   name: string
   labelPath: string
   parentId?: string
+  labels?: Array<{ languageId: string; value: string }>
 }
 
-function getClassificationsForRoot(rootId: string, byId: Map<string, ClassificationNode>): ClassificationNode[] {
-  const result: ClassificationNode[] = []
-  const queue = [rootId]
-  while (queue.length) {
-    const parentId = queue.shift()!
-    for (const node of byId.values()) {
-      if (node.parentId === parentId) {
-        result.push(node)
-        queue.push(node.id)
-      }
-    }
-  }
-  return result
+type FieldValueContext = {
+  classificationsById?: Map<string, ClassificationNode>
+  optionItemsByField?: Map<string, OptionItem[]>
+  selectedLanguageId?: string | null
 }
 
-function getFieldValue(record: AprimoRecord, fieldName: string, classificationsById?: Map<string, ClassificationNode>): string {
+function getFieldValue(record: AprimoRecord, fieldName: string, ctx?: FieldValueContext): string {
   const field = record._embedded?.fields?.items?.find((f) => f.fieldName === fieldName)
   if (!field?.localizedValues?.[0]) return ""
   const lv = field.localizedValues[0]
   if (field.dataType === "ClassificationList" && Array.isArray(lv.values)) {
     return lv.values
-      .map((id) => classificationsById?.get(id)?.labelPath || classificationsById?.get(id)?.name || id)
+      .map((id) => {
+        const node = ctx?.classificationsById?.get(id)
+        if (!node) return id
+        const langLabel = ctx?.selectedLanguageId
+          ? node.labels?.find((l) => l.languageId === ctx.selectedLanguageId)?.value
+          : undefined
+        return langLabel || node.labelPath || node.name || id
+      })
+      .join(", ")
+  }
+  if (field.dataType === "OptionList" && Array.isArray(lv.values)) {
+    const items = ctx?.optionItemsByField?.get(fieldName)
+    return lv.values
+      .map((id) => items?.find((item) => item.id === id)?.label || id)
       .join(", ")
   }
   if (Array.isArray(lv.values)) return lv.values.join(", ")
   return lv.value ?? ""
 }
 
-async function exportToExcel(records: AprimoRecord[], extraFields: string[], fieldDefs: FieldDef[], classificationsById: Map<string, ClassificationNode>) {
+async function exportToExcel(records: AprimoRecord[], extraFields: string[], fieldDefs: FieldDef[], ctx: FieldValueContext) {
   const labelFor = (name: string) => fieldDefs.find((d) => d.name === name)?.label ?? name
 
   const workbook = new ExcelJS.Workbook()
@@ -124,11 +137,11 @@ async function exportToExcel(records: AprimoRecord[], extraFields: string[], fie
     const row = worksheet.getRow(rowNum)
     row.height = ROW_HEIGHT
     row.getCell("id").value = record.id
-    row.getCell("assetTitle").value = getFieldValue(record, "_PMAssetTitle", classificationsById)
+    row.getCell("assetTitle").value = getFieldValue(record, "_PMAssetTitle", ctx)
     row.getCell("contentType").value = record.contentType ?? ""
     row.getCell("status").value = record.status ?? ""
     for (const field of extraFields) {
-      row.getCell(field).value = getFieldValue(record, field, classificationsById)
+      row.getCell(field).value = getFieldValue(record, field, ctx)
     }
     row.commit()
 
@@ -154,7 +167,7 @@ async function exportToExcel(records: AprimoRecord[], extraFields: string[], fie
 function BasketExampleContent() {
   const searchParams = useSearchParams()
   const requestId = searchParams.get("requestId")
-  const { client, isConnected } = useAprimo()
+  const { client, isConnected, selectedLanguageId } = useAprimo()
 
   const [records, setRecords] = useState<AprimoRecord[]>([])
   const [recordIds, setRecordIds] = useState<string[]>([])
@@ -165,6 +178,7 @@ function BasketExampleContent() {
 
   const [fieldDefs, setFieldDefs] = useState<FieldDef[]>([])
   const [classificationsById, setClassificationsById] = useState<Map<string, ClassificationNode>>(new Map())
+  const [optionItemsByField, setOptionItemsByField] = useState<Map<string, OptionItem[]>>(new Map())
   const [selectedFields, setSelectedFields] = useState<Set<string>>(new Set())
   const [tableFields, setTableFields] = useState<string[]>([])
   const [panelOpen, setPanelOpen] = useState(false)
@@ -180,10 +194,16 @@ function BasketExampleContent() {
         if (!result.ok) break
         allDefs.push(...(result.data?.items ?? []) as unknown as FieldDef[])
       }
-      setFieldDefs(
-        allDefs
-          .filter((d) => !["RecordLink", "Json", "HyperlinkList", "Duration"].includes(d.dataType))
-          .sort((a, b) => (a.label ?? a.name).localeCompare(b.label ?? b.name))
+      const filtered = allDefs
+        .filter((d) => !["RecordLink", "Json", "HyperlinkList", "Duration"].includes(d.dataType))
+        .sort((a, b) => (a.label ?? a.name).localeCompare(b.label ?? b.name))
+      setFieldDefs(filtered)
+      setOptionItemsByField(
+        new Map(
+          filtered
+            .filter((d) => d.dataType === "OptionList" && d.items)
+            .map((d) => [d.name, d.items!])
+        )
       )
     }
 
@@ -280,7 +300,7 @@ function BasketExampleContent() {
       const fields = ["_PMAssetTitle", ...Array.from(selectedFields).filter((f) => f !== "_PMAssetTitle")]
       const fetched = await fetchRecords(recordIds, fields)
       setRecords(fetched)
-      await exportToExcel(fetched, fields, fieldDefs, classificationsById)
+      await exportToExcel(fetched, fields, fieldDefs, { classificationsById, optionItemsByField, selectedLanguageId })
     } catch (err) {
       setError(err instanceof Error ? err.message : "Export failed")
     } finally {
@@ -353,16 +373,6 @@ function BasketExampleContent() {
                     setError(null)
                     try {
                       const fetched = await fetchRecords(recordIds, fields)
-                      const classificationFieldDefs = fieldDefs.filter(
-                        (d) => selectedFields.has(d.name) && d.dataType === "ClassificationList"
-                      )
-                      if (classificationFieldDefs.length > 0) {
-                        console.log("[ClassificationList] field definitions:", classificationFieldDefs)
-                        for (const def of classificationFieldDefs) {
-                          const values = getClassificationsForRoot(def.rootId!, classificationsById)
-                          console.log(`[ClassificationList] values for "${def.name}" (rootId: ${def.rootId}):`, values)
-                        }
-                      }
                       setRecords(fetched)
                     } catch (err) {
                       setError(err instanceof Error ? err.message : "Reload failed")
@@ -453,11 +463,11 @@ function BasketExampleContent() {
                         : <div className="w-16 h-16 bg-muted rounded" />}
                     </td>
                     <td className="py-2 pr-4 font-mono text-xs">{record.id}</td>
-                    <td className="py-2 pr-4">{getFieldValue(record, "_PMAssetTitle", classificationsById)}</td>
+                    <td className="py-2 pr-4">{getFieldValue(record, "_PMAssetTitle", { classificationsById, optionItemsByField, selectedLanguageId })}</td>
                     <td className="py-2 pr-4">{record.contentType ?? "-"}</td>
                     <td className="py-2 pr-4">{record.status ?? "-"}</td>
                     {tableFields.map((f) => (
-                      <td key={f} className="py-2 pr-4">{getFieldValue(record, f, classificationsById) || "-"}</td>
+                      <td key={f} className="py-2 pr-4">{getFieldValue(record, f, { classificationsById, optionItemsByField, selectedLanguageId }) || "-"}</td>
                     ))}
                   </tr>
                 ))}
@@ -467,7 +477,7 @@ function BasketExampleContent() {
             <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
               {records.map((record) => {
                 const thumb = gridShowPreview ? getPreviewUri(record) ?? getThumbnailUri(record) : getThumbnailUri(record)
-                const title = getFieldValue(record, "_PMAssetTitle", classificationsById)
+                const title = getFieldValue(record, "_PMAssetTitle", { classificationsById, optionItemsByField, selectedLanguageId })
                 return (
                   <div key={record.id} className="border rounded-lg overflow-hidden">
                     {thumb
@@ -478,7 +488,7 @@ function BasketExampleContent() {
                       {record.contentType && <p className="text-xs text-muted-foreground">{record.contentType}</p>}
                       {record.status && <p className="text-xs text-muted-foreground">{record.status}</p>}
                       {tableFields.map((f) => {
-                        const value = getFieldValue(record, f, classificationsById)
+                        const value = getFieldValue(record, f, { classificationsById, optionItemsByField, selectedLanguageId })
                         if (!value) return null
                         return (
                           <p key={f} className="text-xs text-muted-foreground">

@@ -25,6 +25,8 @@ interface AprimoContextType {
   getAuthHeader: () => string | null
   getBaseUrl: () => string | null
   client: ReturnType<typeof createClient> | null
+  selectedLanguageId: string | null
+  setSelectedLanguageId: (id: string | null) => void
 }
 
 const AprimoContext = createContext<AprimoContextType | undefined>(undefined)
@@ -60,6 +62,7 @@ async function fetchToken(creds: AprimoCredentials): Promise<AprimoConnection> {
 
 export function AprimoProvider({ children }: { children: ReactNode }) {
   const [connection, setConnectionState] = useState<AprimoConnection | null>(null)
+  const [selectedLanguageId, setSelectedLanguageId] = useState<string | null>(null)
   const credentialsRef = useRef<AprimoCredentials | null>(null)
   const refreshingRef = useRef<Promise<string> | null>(null)
 
@@ -98,6 +101,7 @@ export function AprimoProvider({ children }: { children: ReactNode }) {
 
   const clearConnection = useCallback(() => {
     setConnectionState(null)
+    setSelectedLanguageId(null)
     credentialsRef.current = null
   }, [])
 
@@ -135,6 +139,8 @@ export function AprimoProvider({ children }: { children: ReactNode }) {
         getAuthHeader,
         getBaseUrl,
         client,
+        selectedLanguageId,
+        setSelectedLanguageId,
       }}
     >
       {children}
