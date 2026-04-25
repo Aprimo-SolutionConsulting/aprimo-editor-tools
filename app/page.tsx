@@ -3,7 +3,7 @@
 import { Navbar } from "@/components/navbar"
 import { Footer } from "@/components/footer"
 import { Button } from "@/components/ui/button"
-import { ShoppingBasket } from "lucide-react"
+import { FileSpreadsheet } from "lucide-react"
 import Link from "next/link"
 import { useAprimo } from "@/context/aprimo-context"
 
@@ -30,14 +30,14 @@ export default function Home() {
           )}
           {isConnected && (
             <div className="grid gap-4 sm:grid-cols-1">
-              <Link href="/my-basket">
+              <Link href="/excel-import">
                 <div className="border border-border rounded-lg p-6 text-left hover:bg-muted/50 transition-colors cursor-pointer">
                   <div className="flex items-center gap-3 mb-2">
-                    <ShoppingBasket className="h-5 w-5 text-primary" />
-                    <h2 className="text-lg font-semibold">My Basket</h2>
+                    <FileSpreadsheet className="h-5 w-5 text-primary" />
+                    <h2 className="text-lg font-semibold">Excel Import</h2>
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    View and export records from your Aprimo basket with configurable field columns.
+                    Import records into Aprimo from an Excel spreadsheet.
                   </p>
                 </div>
               </Link>
