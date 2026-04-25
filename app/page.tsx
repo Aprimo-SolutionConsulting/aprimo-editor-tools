@@ -19,7 +19,7 @@ export default function Home() {
           <p className="text-lg text-muted-foreground">
             {isConnected
               ? "You're connected. Choose a tool below to get started."
-              : "Connect to your Aprimo environment to get started."}
+              : "Connect to your Aprimo environment to get started. This application requires PKCE auth."}
           </p>
           {!isConnected && (
             <Button
