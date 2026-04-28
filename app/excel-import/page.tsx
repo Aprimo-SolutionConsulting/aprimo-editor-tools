@@ -3,7 +3,7 @@
 import { useRef, useState, useEffect } from "react"
 import { Navbar } from "@/components/navbar"
 import { Footer } from "@/components/footer"
-import { FileSpreadsheet, Upload, ChevronsUpDown, Check } from "lucide-react"
+import { FileSpreadsheet, Upload, ChevronsUpDown, Check, CheckCircle2, XCircle, Loader2 } from "lucide-react"
 import ExcelJS from "exceljs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
@@ -12,10 +12,13 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Button } from "@/components/ui/button"
 import { useAprimo } from "@/context/aprimo-context"
 import type { FieldDef, ClassificationNode } from "@/models/aprimo"
+import { buildClassificationTree, flattenForPicker } from "@/lib/classifications"
+import type { FlatNode } from "@/lib/classifications"
 
 interface ParsedFile {
   headers: string[]
   columnValues: Record<string, string[]>
+  rows: Record<string, string>[]
 }
 
 async function parseFile(file: File): Promise<ParsedFile> {
@@ -23,7 +26,7 @@ async function parseFile(file: File): Promise<ParsedFile> {
   const workbook = new ExcelJS.Workbook()
   await workbook.xlsx.load(buffer)
   const sheet = workbook.worksheets[0]
-  if (!sheet) return { headers: [], columnValues: {} }
+  if (!sheet) return { headers: [], columnValues: {}, rows: [] }
 
   const headerRow = sheet.getRow(1)
   const headers: string[] = []
@@ -37,37 +40,41 @@ async function parseFile(file: File): Promise<ParsedFile> {
   const valueSets: Record<string, Set<string>> = {}
   for (const h of headers) valueSets[h] = new Set()
 
+  const rows: Record<string, string>[] = []
   sheet.eachRow((row, rowNumber) => {
     if (rowNumber === 1) return
+    const record: Record<string, string> = {}
     for (const [h, colIdx] of Object.entries(colIndexByHeader)) {
       const val = String(row.getCell(colIdx).value ?? "").trim()
+      record[h] = val
       if (val) valueSets[h].add(val)
     }
+    rows.push(record)
   })
 
   const columnValues: Record<string, string[]> = {}
   for (const h of headers) columnValues[h] = Array.from(valueSets[h]).sort()
 
-  return { headers, columnValues }
+  return { headers, columnValues, rows }
 }
 
 function ClassificationCombobox({
-  classifications,
+  nodes,
   value,
   onChange,
 }: {
-  classifications: ClassificationNode[]
+  nodes: FlatNode[]
   value: string
   onChange: (id: string) => void
 }) {
   const [open, setOpen] = useState(false)
-  const selected = classifications.find((c) => c.id === value)
+  const selected = nodes.find((n) => n.id === value)
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button variant="outline" role="combobox" className="h-7 w-full max-w-xs justify-between text-xs font-normal">
-          <span className="truncate">{selected ? (selected.labelPath || selected.name) : "Select classification…"}</span>
+          <span className="truncate">{selected ? selected.label : "Select classification…"}</span>
           <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
@@ -77,15 +84,16 @@ function ClassificationCombobox({
           <CommandList>
             <CommandEmpty className="text-xs">No match found.</CommandEmpty>
             <CommandGroup>
-              {classifications.map((c) => (
+              {nodes.map((n) => (
                 <CommandItem
-                  key={c.id}
-                  value={c.labelPath || c.name}
-                  onSelect={() => { onChange(c.id); setOpen(false) }}
+                  key={n.id}
+                  value={n.label}
+                  onSelect={() => { onChange(n.id); setOpen(false) }}
                   className="text-xs"
+                  style={{ paddingLeft: `${0.5 + n.depth * 1}rem` }}
                 >
-                  <Check className={`mr-1 h-3 w-3 ${value === c.id ? "opacity-100" : "opacity-0"}`} />
-                  {c.labelPath || c.name}
+                  <Check className={`mr-1 h-3 w-3 shrink-0 ${value === n.id ? "opacity-100" : "opacity-0"}`} />
+                  {n.label}
                 </CommandItem>
               ))}
             </CommandGroup>
@@ -96,6 +104,13 @@ function ClassificationCombobox({
   )
 }
 
+interface SaveResult {
+  recordId: string
+  success: boolean
+  error?: string
+}
+
+
 export default function ExcelImportPage() {
   const inputRef = useRef<HTMLInputElement>(null)
   const { client, isConnected } = useAprimo()
@@ -104,18 +119,34 @@ export default function ExcelImportPage() {
   const [file, setFile] = useState<File | null>(null)
   const [headers, setHeaders] = useState<string[]>([])
   const [columnValues, setColumnValues] = useState<Record<string, string[]>>({})
+  const [rows, setRows] = useState<Record<string, string>[]>([])
   const [loading, setLoading] = useState(false)
   const [selectedHeaders, setSelectedHeaders] = useState<Set<string>>(new Set())
   const [recordIdColumn, setRecordIdColumn] = useState<string>("")
   const [fieldMappings, setFieldMappings] = useState<Record<string, string>>({})
-  // classificationMappings[column][excelValue] = classificationId
   const [classificationMappings, setClassificationMappings] = useState<Record<string, Record<string, string>>>({})
 
   const [fieldDefs, setFieldDefs] = useState<FieldDef[]>([])
   const [classifications, setClassifications] = useState<ClassificationNode[]>([])
+  const [languages, setLanguages] = useState<{ id: string; name: string }[]>([])
+  const [languageId, setLanguageId] = useState<string>("")
+
+  const [saving, setSaving] = useState(false)
+  const [saveProgress, setSaveProgress] = useState<{ done: number; total: number } | null>(null)
+  const [saveResults, setSaveResults] = useState<SaveResult[]>([])
 
   useEffect(() => {
     if (!isConnected || !client) return
+
+    async function loadLanguages() {
+      const all: { id: string; name: string }[] = []
+      for await (const result of client!.languages.getPaged()) {
+        if (!result.ok) break
+        const items = (result.data?.items ?? []) as unknown as { id: string; name: string; isEnabledForFields: boolean }[]
+        all.push(...items.filter((l) => l.isEnabledForFields))
+      }
+      setLanguages(all.sort((a, b) => a.name.localeCompare(b.name)))
+    }
 
     async function loadFieldDefs() {
       const allDefs: FieldDef[] = []
@@ -139,6 +170,7 @@ export default function ExcelImportPage() {
       setClassifications(all.sort((a, b) => (a.labelPath || a.name).localeCompare(b.labelPath || b.name)))
     }
 
+    loadLanguages()
     loadFieldDefs()
     loadClassifications()
   }, [isConnected, client])
@@ -172,15 +204,18 @@ export default function ExcelImportPage() {
     setFile(f)
     setHeaders([])
     setColumnValues({})
+    setRows([])
     setSelectedHeaders(new Set())
     setRecordIdColumn("")
     setFieldMappings({})
     setClassificationMappings({})
+    setSaveResults([])
     setLoading(true)
     try {
       const parsed = await parseFile(f)
       setHeaders(parsed.headers)
       setColumnValues(parsed.columnValues)
+      setRows(parsed.rows)
     } finally {
       setLoading(false)
     }
@@ -200,7 +235,6 @@ export default function ExcelImportPage() {
 
   const mappableColumns = Array.from(selectedHeaders).filter((h) => h !== recordIdColumn)
 
-  // Auto-map columns to fields by name/label
   useEffect(() => {
     if (!fieldDefs.length || !mappableColumns.length) return
     const normalize = (s: string) => s.toLowerCase().replace(/[\s_-]+/g, "")
@@ -219,7 +253,6 @@ export default function ExcelImportPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fieldDefs, mappableColumns.join(",")])
 
-  // Auto-match Excel classification values to Aprimo classifications by name/labelPath
   useEffect(() => {
     if (!classifications.length) return
     const normalize = (s: string) => s.toLowerCase().trim()
@@ -254,6 +287,73 @@ export default function ExcelImportPage() {
     if (!fieldName) return false
     return fieldDefs.find((d) => d.name === fieldName)?.dataType === "ClassificationList"
   })
+
+  async function handleSave() {
+    if (!client || !recordIdColumn || !languageId) return
+
+    const dataRows = rows.filter((row) => row[recordIdColumn]?.trim())
+    setSaving(true)
+    setSaveResults([])
+    setSaveProgress({ done: 0, total: dataRows.length })
+
+    const results: SaveResult[] = []
+
+    for (let i = 0; i < dataRows.length; i++) {
+      const row = dataRows[i]
+      const recordId = row[recordIdColumn].trim()
+
+      const fieldUpdates = mappableColumns
+        .filter((col) => fieldMappings[col])
+        .flatMap((col) => {
+          const fieldName = fieldMappings[col]
+          const def = fieldDefs.find((d) => d.name === fieldName)
+          if (!def) return []
+          const rawValue = row[col] ?? ""
+
+          if (def.dataType === "ClassificationList") {
+            const colMap = classificationMappings[col] ?? {}
+            const ids = rawValue
+              .split(";")
+              .map((v) => v.trim())
+              .filter(Boolean)
+              .map((v) => colMap[v])
+              .filter(Boolean)
+            if (!ids.length) return []
+            return [{ id: def.id, localizedValues: [{ languageId, values: ids }] }]
+          }
+
+          if (!rawValue) return []
+          return [{ id: def.id, localizedValues: [{ languageId, value: rawValue }] }]
+        })
+
+      if (!fieldUpdates.length) {
+        results.push({ recordId, success: true })
+        setSaveProgress({ done: i + 1, total: dataRows.length })
+        continue
+      }
+
+      try {
+        const result = await client.records.update(recordId, {
+          fields: { addOrUpdate: fieldUpdates as never },
+        })
+        if (result.ok) {
+          results.push({ recordId, success: true })
+        } else {
+          results.push({ recordId, success: false, error: result.error?.message ?? `HTTP ${result.status}` })
+        }
+      } catch (err) {
+        results.push({ recordId, success: false, error: err instanceof Error ? err.message : "Unknown error" })
+      }
+
+      setSaveProgress({ done: i + 1, total: dataRows.length })
+    }
+
+    setSaveResults(results)
+    setSaving(false)
+    setSaveProgress(null)
+  }
+
+  const canSave = !saving && !!recordIdColumn && !!languageId && rows.length > 0 && mappableColumns.some((c) => fieldMappings[c])
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -318,20 +418,35 @@ export default function ExcelImportPage() {
               </div>
             </div>
 
-            {/* Record ID column */}
+            {/* Record ID column + Language */}
             {selectedHeaders.size > 0 && (
-              <div className="flex items-center gap-3">
-                <Label htmlFor="record-id-col" className="text-sm whitespace-nowrap">Record ID column</Label>
-                <Select value={recordIdColumn} onValueChange={setRecordIdColumn}>
-                  <SelectTrigger id="record-id-col" className="w-56 h-8 text-xs">
-                    <SelectValue placeholder="Select a column…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Array.from(selectedHeaders).map((h) => (
-                      <SelectItem key={h} value={h} className="text-xs font-mono">{h}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <Label htmlFor="record-id-col" className="text-sm whitespace-nowrap w-32">Record ID column</Label>
+                  <Select value={recordIdColumn} onValueChange={setRecordIdColumn}>
+                    <SelectTrigger id="record-id-col" className="w-56 h-8 text-xs">
+                      <SelectValue placeholder="Select a column…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from(selectedHeaders).map((h) => (
+                        <SelectItem key={h} value={h} className="text-xs font-mono">{h}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Label htmlFor="language-col" className="text-sm whitespace-nowrap w-32">Language</Label>
+                  <Select value={languageId} onValueChange={setLanguageId}>
+                    <SelectTrigger id="language-col" className="w-56 h-8 text-xs">
+                      <SelectValue placeholder="Select a language…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {languages.map((l) => (
+                        <SelectItem key={l.id} value={l.id} className="text-xs">{l.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             )}
 
@@ -381,6 +496,12 @@ export default function ExcelImportPage() {
               ).sort()
               const colMap = classificationMappings[col] ?? {}
               const fieldDef = fieldDefs.find((d) => d.name === fieldMappings[col])
+              const tree = fieldDef?.rootId
+                ? buildClassificationTree(fieldDef.rootId, classifications)
+                : null
+              const flatNodes: FlatNode[] = tree
+                ? flattenForPicker(tree)
+                : classifications.map((c) => ({ id: c.id, label: c.labelPath || c.name, depth: 0 }))
               return (
                 <div key={col}>
                   <p className="text-sm font-medium mb-1">
@@ -404,7 +525,7 @@ export default function ExcelImportPage() {
                             <td className="px-4 py-2 font-mono text-xs">{val}</td>
                             <td className="px-4 py-2">
                               <ClassificationCombobox
-                                classifications={classifications}
+                                nodes={flatNodes}
                                 value={colMap[val] ?? ""}
                                 onChange={(id) => setClassificationMapping(col, val, id)}
                               />
@@ -417,6 +538,54 @@ export default function ExcelImportPage() {
                 </div>
               )
             })}
+
+            {/* Save */}
+            {mappableColumns.length > 0 && (
+              <div className="flex items-center gap-4 pt-2">
+                <Button onClick={handleSave} disabled={!canSave}>
+                  {saving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving…</> : "Save"}
+                </Button>
+                {saving && saveProgress && (
+                  <p className="text-sm text-muted-foreground">
+                    {saveProgress.done} / {saveProgress.total} records
+                  </p>
+                )}
+                {!saving && saveResults.length > 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    {saveResults.filter((r) => r.success).length} succeeded ·{" "}
+                    {saveResults.filter((r) => !r.success).length} failed
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Save results */}
+            {saveResults.length > 0 && (
+              <div className="border border-border rounded-lg overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border bg-muted/50">
+                      <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground w-8"></th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground">Record ID</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground">Error</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {saveResults.map((r, i) => (
+                      <tr key={r.recordId} className={i % 2 === 0 ? "bg-muted/20" : ""}>
+                        <td className="px-4 py-2">
+                          {r.success
+                            ? <CheckCircle2 className="h-4 w-4 text-green-500" />
+                            : <XCircle className="h-4 w-4 text-destructive" />}
+                        </td>
+                        <td className="px-4 py-2 font-mono text-xs">{r.recordId}</td>
+                        <td className="px-4 py-2 text-xs text-muted-foreground">{r.error ?? ""}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
       </main>

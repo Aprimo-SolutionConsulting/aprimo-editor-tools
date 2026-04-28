@@ -5,5 +5,5 @@
   "mybasketlocal": "http://localhost:3000/my-basket",
   "mybasket": "https://aprimo-editor-tools.vercel.app/my-basket",
   "myitemlocal": "http://localhost:3000/my-item",
-  "myiteme": "https://aprimo-editor-tools.vercel.app/my-item"
+  "myitem": "https://aprimo-editor-tools.vercel.app/my-item"
 }

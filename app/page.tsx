@@ -3,7 +3,7 @@
 import { Navbar } from "@/components/navbar"
 import { Footer } from "@/components/footer"
 import { Button } from "@/components/ui/button"
-import { FileSpreadsheet } from "lucide-react"
+import { FileSpreadsheet, Upload } from "lucide-react"
 import Link from "next/link"
 import { useAprimo } from "@/context/aprimo-context"
 
@@ -29,7 +29,7 @@ export default function Home() {
             </Button>
           )}
           {isConnected && (
-            <div className="grid gap-4 sm:grid-cols-1">
+            <div className="grid gap-4 sm:grid-cols-2">
               <Link href="/excel-import">
                 <div className="border border-border rounded-lg p-6 text-left hover:bg-muted/50 transition-colors cursor-pointer">
                   <div className="flex items-center gap-3 mb-2">
@@ -38,6 +38,17 @@ export default function Home() {
                   </div>
                   <p className="text-sm text-muted-foreground">
                     Import records into Aprimo from an Excel spreadsheet.
+                  </p>
+                </div>
+              </Link>
+              <Link href="/bulk-upload">
+                <div className="border border-border rounded-lg p-6 text-left hover:bg-muted/50 transition-colors cursor-pointer">
+                  <div className="flex items-center gap-3 mb-2">
+                    <Upload className="h-5 w-5 text-primary" />
+                    <h2 className="text-lg font-semibold">Bulk Upload</h2>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Upload files into Aprimo with shared or per-asset field values.
                   </p>
                 </div>
               </Link>
