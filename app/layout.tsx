@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { Inter, Space_Grotesk, Geist_Mono } from 'next/font/google'
+import { Roboto } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { Toaster } from 'sonner'
 import { AprimoProvider } from '@/context/aprimo-context'
@@ -7,20 +7,12 @@ import { AprimoConfigDialog } from '@/components/aprimo-config-dialog'
 import { AprimoSettingsBar } from '@/components/aprimo-settings-bar'
 import './globals.css'
 
-const inter = Inter({ 
+const roboto = Roboto({
   subsets: ["latin"],
-  variable: '--font-inter',
+  weight: ["400", "500", "700"],
+  variable: '--font-sans',
 })
 
-const spaceGrotesk = Space_Grotesk({ 
-  subsets: ["latin"],
-  variable: '--font-space-grotesk',
-})
-
-const geistMono = Geist_Mono({ 
-  subsets: ["latin"],
-  variable: '--font-geist-mono',
-})
 
 export const metadata: Metadata = {
   title: 'Aprimo Editor Tools',
@@ -47,7 +39,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} ${spaceGrotesk.variable} ${geistMono.variable}`}>
+    <html lang="en" className={roboto.variable}>
       <body className="font-sans antialiased bg-background">
         <AprimoProvider>
           <AprimoConfigDialog />

@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
+import { Navbar } from "@/components/navbar"
+import { Footer } from "@/components/footer"
 import { useAprimo } from "@/context/aprimo-context"
 import { supabase } from "@/lib/supabase"
 import { Expander } from "aprimo-js"
@@ -163,7 +165,6 @@ function BasketExampleContent() {
   if (!requestId) {
     return (
       <main className="p-8">
-        <h1 className="text-2xl font-bold mb-4">My Basket</h1>
         <p className="text-sm text-muted-foreground">No requestId provided.</p>
       </main>
     )
@@ -171,7 +172,6 @@ function BasketExampleContent() {
 
   return (
     <main className="p-8">
-      <h1 className="text-2xl font-bold mb-4">My Basket</h1>
 
       <FieldDefinitionsPanel
         fieldDefs={fieldDefs}
@@ -259,8 +259,12 @@ function BasketExampleContent() {
 
 export default function BasketExamplePage() {
   return (
-    <Suspense>
-      <BasketExampleContent />
-    </Suspense>
+    <div className="min-h-screen bg-background flex flex-col">
+      <Navbar />
+      <Suspense>
+        <BasketExampleContent />
+      </Suspense>
+      <Footer />
+    </div>
   )
 }

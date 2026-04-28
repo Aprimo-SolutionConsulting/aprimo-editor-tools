@@ -76,9 +76,9 @@
 }
 
 @theme inline {
-  --font-sans: 'Inter', 'Geist', 'Geist Fallback', sans-serif;
-  --font-mono: 'Geist Mono', 'Geist Mono Fallback', monospace;
-  --font-display: 'Space Grotesk', 'Geist', sans-serif;
+  --font-sans: 'Roboto', 'Helvetica', 'Arial', sans-serif;
+  --font-mono: monospace;
+  --font-display: 'Roboto', 'Helvetica', 'Arial', sans-serif;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);

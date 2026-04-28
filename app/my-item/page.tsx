@@ -2,6 +2,8 @@
 
 import { Suspense } from "react"
 import { useSearchParams } from "next/navigation"
+import { Navbar } from "@/components/navbar"
+import { Footer } from "@/components/footer"
 
 function MyItemContent() {
   const searchParams = useSearchParams()
@@ -9,7 +11,6 @@ function MyItemContent() {
 
   return (
     <main className="p-8">
-      <h1 className="text-2xl font-bold mb-4">My Item</h1>
       {recordId
         ? <p className="text-sm text-muted-foreground font-mono">{recordId}</p>
         : <p className="text-sm text-muted-foreground">No record ID provided.</p>}
@@ -19,8 +20,12 @@ function MyItemContent() {
 
 export default function MyItemPage() {
   return (
-    <Suspense>
-      <MyItemContent />
-    </Suspense>
+    <div className="min-h-screen bg-background flex flex-col">
+      <Navbar />
+      <Suspense>
+        <MyItemContent />
+      </Suspense>
+      <Footer />
+    </div>
   )
 }

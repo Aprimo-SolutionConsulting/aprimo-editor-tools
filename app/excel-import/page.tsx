@@ -358,9 +358,7 @@ export default function ExcelImportPage() {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Navbar />
-      <main className="flex-1 p-8 max-w-3xl mx-auto w-full">
-        <h1 className="text-2xl font-bold mb-6">Excel Import</h1>
-
+      <main className="flex-1 p-8 w-full">
         <div
           onClick={() => inputRef.current?.click()}
           onDragOver={(e) => { e.preventDefault(); setDragging(true) }}

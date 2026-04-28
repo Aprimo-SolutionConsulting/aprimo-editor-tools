@@ -11,6 +11,7 @@ import { FieldDefinitionSearch } from "@/components/field-definition-search"
 import { useAprimo } from "@/context/aprimo-context"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
@@ -45,6 +46,7 @@ export default function BulkUploadPage() {
   const [files, setFiles] = useState<UploadItem[]>([])
   const [isDragging, setIsDragging] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
+  const [uploadComplete, setUploadComplete] = useState(false)
 
   const [pickerOpen, setPickerOpen] = useState(false)
   const [pickerType, setPickerType] = useState<SupportedDataType>("SingleLineText")
@@ -273,6 +275,7 @@ export default function BulkUploadPage() {
     }
 
     setIsUploading(false)
+    setUploadComplete(true)
     toast.success("Upload run complete")
   }
 
@@ -311,9 +314,8 @@ export default function BulkUploadPage() {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Navbar />
-      <main className="flex-1 max-w-7xl mx-auto w-full px-6 py-10">
+      <main className="flex-1 w-full px-6 py-10">
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-          <h1 className="text-3xl font-bold mb-2">Bulk Upload</h1>
           <p className="text-muted-foreground mb-8">
             Define shared fields applied to every asset, plus per-asset columns for custom values.
             Per-asset values override shared values for the same field.
@@ -349,9 +351,9 @@ export default function BulkUploadPage() {
                 </Button>
               </div>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {sharedCols.length === 0 && (
-                <p className="text-sm text-muted-foreground text-center py-6">
+                <p className="col-span-full text-sm text-muted-foreground text-center py-6">
                   No shared fields. Add ones whose value will be the same for every asset.
                 </p>
               )}
@@ -375,6 +377,13 @@ export default function BulkUploadPage() {
                       allClassifications={allClassifications}
                       value={col.sharedClassifications}
                       onChange={(next) => updateCol(col.uid, { sharedClassifications: next })}
+                    />
+                  ) : col.dataType === "MultiLineText" ? (
+                    <Textarea
+                      placeholder="Value…"
+                      rows={2}
+                      value={col.sharedTextValue}
+                      onChange={(e) => updateCol(col.uid, { sharedTextValue: e.target.value })}
                     />
                   ) : (
                     <Input
@@ -517,10 +526,10 @@ export default function BulkUploadPage() {
               {errorCount > 0 && ` · ${errorCount} failed`}
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" onClick={() => setFiles([])} disabled={isUploading || files.length === 0}>
+              <Button variant="outline" onClick={() => { setFiles([]); setUploadComplete(false) }} disabled={isUploading || files.length === 0}>
                 <Trash2 className="w-4 h-4" /> Clear
               </Button>
-              <Button onClick={handleUploadAll} disabled={isUploading || files.length === 0}>
+              <Button onClick={handleUploadAll} disabled={isUploading || uploadComplete || files.length === 0}>
                 {isUploading
                   ? <><Loader2 className="w-4 h-4 animate-spin" /> Uploading…</>
                   : <><Upload className="w-4 h-4" /> Upload all</>}

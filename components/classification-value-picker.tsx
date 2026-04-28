@@ -1,8 +1,9 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { ChevronsUpDown, Check } from "lucide-react"
+import { ChevronsUpDown, Check, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import type { ClassificationNode } from "@/models/aprimo"
@@ -52,46 +53,62 @@ export function ClassificationValuePicker({
   }
 
   return (
-    <Popover open={open} onOpenChange={disabled ? undefined : setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          role="combobox"
-          disabled={disabled}
-          className="h-8 w-full max-w-xs justify-between text-xs font-normal"
-        >
-          <span className="truncate">
-            {value.length === 0
-              ? "Select…"
-              : value.length === 1
-              ? value[0].label
-              : `${value.length} selected`}
-          </span>
-          <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-80 p-0" align="start">
-        <Command>
-          <CommandInput placeholder="Search…" className="text-xs" />
-          <CommandList>
-            <CommandEmpty className="text-xs">No match.</CommandEmpty>
-            <CommandGroup>
-              {flatNodes.map((n) => (
-                <CommandItem
-                  key={n.id}
-                  value={n.label}
-                  onSelect={() => toggle(n.id, n.label)}
-                  className="text-xs"
-                  style={{ paddingLeft: `${0.5 + n.depth}rem` }}
+    <div className="space-y-1.5">
+      <Popover open={open} onOpenChange={disabled ? undefined : setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            role="combobox"
+            disabled={disabled}
+            className="h-8 w-full max-w-xs justify-between text-xs font-normal"
+          >
+            <span className="truncate">
+              {value.length === 0 ? "Select…" : value.length === 1 ? value[0].label : `${value.length} selected`}
+            </span>
+            <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-80 p-0" align="start">
+          <Command>
+            <CommandInput placeholder="Search…" className="text-xs" />
+            <CommandList>
+              <CommandEmpty className="text-xs">No match.</CommandEmpty>
+              <CommandGroup>
+                {flatNodes.map((n) => (
+                  <CommandItem
+                    key={n.id}
+                    value={n.label}
+                    onSelect={() => toggle(n.id, n.label)}
+                    className="text-xs"
+                    style={{ paddingLeft: `${0.5 + n.depth}rem` }}
+                  >
+                    <Check className={`mr-1 h-3 w-3 shrink-0 ${selectedIds.has(n.id) ? "opacity-100" : "opacity-0"}`} />
+                    {n.label}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+
+      {value.length > 1 && (
+        <div className="flex flex-wrap gap-1">
+          {value.map((v) => (
+            <Badge key={v.id} variant="secondary" className="text-xs gap-1 pr-1">
+              {v.label}
+              {!disabled && (
+                <button
+                  onClick={() => onChange(value.filter((s) => s.id !== v.id))}
+                  className="ml-0.5 rounded-full hover:bg-muted-foreground/20"
                 >
-                  <Check className={`mr-1 h-3 w-3 shrink-0 ${selectedIds.has(n.id) ? "opacity-100" : "opacity-0"}`} />
-                  {n.label}
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
+                  <X className="h-2.5 w-2.5" />
+                </button>
+              )}
+            </Badge>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
