@@ -8,6 +8,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
+const ENV_ENVIRONMENT = process.env.NEXT_PUBLIC_APRIMO_ENVIRONMENT ?? ""
+const ENV_CLIENT_ID = process.env.NEXT_PUBLIC_APRIMO_CLIENT_ID ?? ""
+const ENV_CLIENT_SECRET = process.env.NEXT_PUBLIC_APRIMO_CLIENT_SECRET ?? ""
+const ALL_FROM_ENV = !!(ENV_ENVIRONMENT && ENV_CLIENT_ID && ENV_CLIENT_SECRET)
+
 function startOAuth(environment: string, clientId: string, clientSecret: string) {
   generatePKCE().then(({ codeVerifier, codeChallenge }) => {
     const redirectUri = `${window.location.origin}/oauth/callback`
@@ -29,9 +34,9 @@ export function AprimoConfigDialog() {
   const hasAttempted = useRef(false)
 
   function openWithCurrentValues() {
-    setEnvironment(localStorage.getItem("aprimo_environment") ?? "")
-    setClientId(localStorage.getItem("aprimo_client_id") ?? "")
-    setClientSecret(localStorage.getItem("aprimo_client_secret") ?? "")
+    setEnvironment(ENV_ENVIRONMENT || (localStorage.getItem("aprimo_environment") ?? ""))
+    setClientId(ENV_CLIENT_ID || (localStorage.getItem("aprimo_client_id") ?? ""))
+    setClientSecret(ENV_CLIENT_SECRET || (localStorage.getItem("aprimo_client_secret") ?? ""))
     setOpen(true)
   }
 
@@ -56,6 +61,11 @@ export function AprimoConfigDialog() {
     if (hasAttempted.current) return
     hasAttempted.current = true
 
+    if (ALL_FROM_ENV) {
+      startOAuth(ENV_ENVIRONMENT, ENV_CLIENT_ID, ENV_CLIENT_SECRET)
+      return
+    }
+
     const env = localStorage.getItem("aprimo_environment")
     const cid = localStorage.getItem("aprimo_client_id")
     const secret = localStorage.getItem("aprimo_client_secret") ?? ""
@@ -67,12 +77,14 @@ export function AprimoConfigDialog() {
   }, [isConnected])
 
   function handleConnect() {
-    const env = environment.trim()
-    const cid = clientId.trim()
-    const secret = clientSecret.trim()
-    localStorage.setItem("aprimo_environment", env)
-    localStorage.setItem("aprimo_client_id", cid)
-    localStorage.setItem("aprimo_client_secret", secret)
+    const env = ENV_ENVIRONMENT || environment.trim()
+    const cid = ENV_CLIENT_ID || clientId.trim()
+    const secret = ENV_CLIENT_SECRET || clientSecret.trim()
+    if (!ALL_FROM_ENV) {
+      localStorage.setItem("aprimo_environment", env)
+      localStorage.setItem("aprimo_client_id", cid)
+      localStorage.setItem("aprimo_client_secret", secret)
+    }
     setOpen(false)
     startOAuth(env, cid, secret)
   }
@@ -83,7 +95,9 @@ export function AprimoConfigDialog() {
         <DialogHeader>
           <DialogTitle>Aprimo Configuration</DialogTitle>
           <DialogDescription>
-            Enter your Aprimo credentials. These will be saved in your browser for future use.
+            {ALL_FROM_ENV
+              ? "Connection is pre-configured via environment variables."
+              : "Enter your Aprimo credentials. These will be saved in your browser for future use."}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-2">
@@ -94,10 +108,13 @@ export function AprimoConfigDialog() {
               placeholder="yourcompany"
               value={environment}
               onChange={(e) => setEnvironment(e.target.value)}
+              disabled={!!ENV_ENVIRONMENT}
             />
-            <p className="text-xs text-muted-foreground">
-              The subdomain of your Aprimo instance (e.g. <span className="font-mono">yourcompany</span> for yourcompany.aprimo.com)
-            </p>
+            {!ENV_ENVIRONMENT && (
+              <p className="text-xs text-muted-foreground">
+                The subdomain of your Aprimo instance (e.g. <span className="font-mono">yourcompany</span> for yourcompany.aprimo.com)
+              </p>
+            )}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="config-client-id">Client ID</Label>
@@ -106,6 +123,7 @@ export function AprimoConfigDialog() {
               placeholder="your-client-id"
               value={clientId}
               onChange={(e) => setClientId(e.target.value)}
+              disabled={!!ENV_CLIENT_ID}
             />
           </div>
           <div className="space-y-1.5">
@@ -116,12 +134,13 @@ export function AprimoConfigDialog() {
               placeholder="your-client-secret"
               value={clientSecret}
               onChange={(e) => setClientSecret(e.target.value)}
+              disabled={!!ENV_CLIENT_SECRET}
             />
           </div>
         </div>
         <DialogFooter>
           <Button
-            disabled={!environment.trim() || !clientId.trim()}
+            disabled={!ENV_ENVIRONMENT && !environment.trim() || !ENV_CLIENT_ID && !clientId.trim()}
             onClick={handleConnect}
           >
             Connect
