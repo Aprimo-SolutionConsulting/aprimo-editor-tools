@@ -15,7 +15,7 @@ export function Navbar() {
       <div className="border-b border-border px-6">
         <div className="flex items-center justify-between h-14">
           <Link href="/">
-            <Image src="/images/aprimo-logo.svg" alt="Aprimo" width={120} height={54} />
+            <Image src="/images/aprimo-logo.svg" alt="Aprimo" width={90} height={40} />
           </Link>
 
           <div className="flex items-center gap-6 text-sm">
