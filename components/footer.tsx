@@ -7,7 +7,7 @@ export function Footer() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-foreground">
             <Activity className="h-5 w-5 text-primary" />
-            <span className="font-semibold">Aprimo</span>
+            <span className="font-semibold">Aprimo Editor Tools</span>
           </div>
           <p className="text-sm text-muted-foreground">
             &copy; 2026 Aprimo. All rights reserved.
