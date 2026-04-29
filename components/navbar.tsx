@@ -7,6 +7,12 @@ import { Badge } from "@/components/ui/badge"
 import { PageHeader } from "@/components/page-header"
 import Image from "next/image"
 
+const ALL_FROM_ENV = !!(
+  process.env.NEXT_PUBLIC_APRIMO_ENVIRONMENT &&
+  process.env.NEXT_PUBLIC_APRIMO_CLIENT_ID &&
+  process.env.NEXT_PUBLIC_APRIMO_CLIENT_SECRET
+)
+
 export function Navbar() {
   const { isConnected, connection } = useAprimo()
 
@@ -19,20 +25,19 @@ export function Navbar() {
           </Link>
 
           <div className="flex items-center gap-6 text-sm">
-            <button
-              onClick={() => window.dispatchEvent(new Event("aprimo:open-config"))}
-              className="text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Connect
-            </button>
+            {!ALL_FROM_ENV && (
+              <button
+                onClick={() => window.dispatchEvent(new Event("aprimo:open-config"))}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Connect
+              </button>
+            )}
             {isConnected && (
               <Link href="/bulk-upload" className="text-muted-foreground hover:text-foreground transition-colors">
                 Bulk Upload
               </Link>
             )}
-            <Link href="/getting-started" className="text-muted-foreground hover:text-foreground transition-colors">
-              Getting Started
-            </Link>
             {isConnected ? (
               <Badge variant="outline" className="flex items-center gap-1.5 border-success text-success">
                 <Wifi className="h-3 w-3" />

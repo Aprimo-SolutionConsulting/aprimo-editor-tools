@@ -9,7 +9,6 @@ const routeLabels: Record<string, string> = {
   "bulk-upload": "Bulk Upload",
   "my-item": "My Item",
   "my-basket": "My Basket",
-  "getting-started": "Getting Started",
 }
 
 export function PageHeader() {

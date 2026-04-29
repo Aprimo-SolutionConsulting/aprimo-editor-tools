@@ -30,17 +30,6 @@ export default function Home() {
           )}
           {isConnected && (
             <div className="grid gap-4 sm:grid-cols-2">
-              <Link href="/excel-import">
-                <div className="border border-border rounded-lg p-6 text-left hover:bg-muted/50 transition-colors cursor-pointer">
-                  <div className="flex items-center gap-3 mb-2">
-                    <FileSpreadsheet className="h-5 w-5 text-primary" />
-                    <h2 className="text-lg font-semibold">Excel Import</h2>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    Import records into Aprimo from an Excel spreadsheet.
-                  </p>
-                </div>
-              </Link>
               <Link href="/bulk-upload">
                 <div className="border border-border rounded-lg p-6 text-left hover:bg-muted/50 transition-colors cursor-pointer">
                   <div className="flex items-center gap-3 mb-2">
@@ -49,6 +38,17 @@ export default function Home() {
                   </div>
                   <p className="text-sm text-muted-foreground">
                     Upload files into Aprimo with shared or per-asset field values.
+                  </p>
+                </div>
+              </Link>
+              <Link href="/excel-import">
+                <div className="border border-border rounded-lg p-6 text-left hover:bg-muted/50 transition-colors cursor-pointer">
+                  <div className="flex items-center gap-3 mb-2">
+                    <FileSpreadsheet className="h-5 w-5 text-primary" />
+                    <h2 className="text-lg font-semibold">Excel Import</h2>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Import records into Aprimo from an Excel spreadsheet.
                   </p>
                 </div>
               </Link>
