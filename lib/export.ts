@@ -20,7 +20,7 @@ function getFieldValue(record: AprimoRecord, fieldName: string, ctx?: FieldValue
           : undefined
         return langLabel || node.labelPath || node.name || id
       })
-      .join(", ")
+      .join("; ")
   }
   if (field.dataType === "OptionList" && Array.isArray(lv.values)) {
     const items = ctx?.optionItemsByField?.get(fieldName)
@@ -31,9 +31,9 @@ function getFieldValue(record: AprimoRecord, fieldName: string, ctx?: FieldValue
         if (ctx?.selectedLanguageId === "__system__") return item.name || id
         return item.label || id
       })
-      .join(", ")
+      .join("; ")
   }
-  if (Array.isArray(lv.values)) return lv.values.join(", ")
+  if (Array.isArray(lv.values)) return lv.values.join("; ")
   return lv.value ?? ""
 }
 

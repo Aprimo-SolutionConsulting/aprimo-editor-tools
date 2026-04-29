@@ -333,9 +333,10 @@ export default function ExcelImportPage() {
       }
 
       try {
-        const result = await client.records.update(recordId, {
-          fields: { addOrUpdate: fieldUpdates as never },
-        })
+        const body: Record<string, unknown> = {
+          fields: { addOrUpdate: fieldUpdates },
+        }
+        const result = await client.records.update(recordId, body as never)
         if (result.ok) {
           results.push({ recordId, success: true })
         } else {
