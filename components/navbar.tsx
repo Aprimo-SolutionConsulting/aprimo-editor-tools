@@ -38,6 +38,11 @@ export function Navbar() {
                 Bulk Upload
               </Link>
             )}
+            {isConnected && (
+              <Link href="/excel-import" className="text-muted-foreground hover:text-foreground transition-colors">
+                Excel Import
+              </Link>
+            )}
             {isConnected ? (
               <Badge variant="outline" className="flex items-center gap-1.5 border-success text-success">
                 <Wifi className="h-3 w-3" />
