@@ -32,7 +32,8 @@ async function parseFile(file: File): Promise<ParsedFile> {
   const headers: string[] = []
   const colIndexByHeader: Record<string, number> = {}
   headerRow.eachCell({ includeEmpty: false }, (cell, col) => {
-    const h = String(cell.value ?? "")
+    const h = String(cell.value ?? "").trim()
+    if (!h) return
     headers.push(h)
     colIndexByHeader[h] = col
   })
@@ -471,11 +472,21 @@ export default function ExcelImportPage() {
                                 <SelectValue placeholder="Select a field…" />
                               </SelectTrigger>
                               <SelectContent>
-                                {fieldDefs.map((d) => (
-                                  <SelectItem key={d.id} value={d.name} className="text-xs">
-                                    {d.label ?? d.name}
-                                  </SelectItem>
-                                ))}
+                                {fieldDefs.map((d) => {
+                                  const tested = ["SingleLineText", "MultiLineText", "ClassificationList"].includes(d.dataType)
+                                  return (
+                                    <SelectItem key={d.id} value={d.name} className="text-xs">
+                                      <span className="flex items-center gap-2">
+                                        {d.label ?? d.name}
+                                        {!tested && (
+                                          <span className="text-[10px] font-medium px-1 py-0.5 rounded bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
+                                            not tested ({d.dataType})
+                                          </span>
+                                        )}
+                                      </span>
+                                    </SelectItem>
+                                  )
+                                })}
                               </SelectContent>
                             </Select>
                           </td>
