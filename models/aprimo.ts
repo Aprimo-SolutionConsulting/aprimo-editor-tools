@@ -33,6 +33,7 @@ export type FieldDef = {
   name: string
   label: string
   dataType: string
+  isReadOnly?: boolean
   rootId?: string
   items?: OptionItem[]
 }

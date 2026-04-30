@@ -1,4 +1,4 @@
-export type SupportedDataType = "SingleLineText" | "MultiLineText" | "ClassificationList"
+export type SupportedDataType = "SingleLineText" | "MultiLineText" | "ClassificationList" | "Numeric"
 export type Scope = "shared" | "per-asset"
 
 export interface ClassificationSelection {

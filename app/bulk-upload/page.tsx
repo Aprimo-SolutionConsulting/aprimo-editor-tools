@@ -78,7 +78,7 @@ export default function BulkUploadPage() {
       }
       setFieldDefs(
         allDefs
-          .filter((d) => ["SingleLineText", "MultiLineText", "ClassificationList"].includes(d.dataType))
+          .filter((d) => ["SingleLineText", "MultiLineText", "ClassificationList", "Numeric"].includes(d.dataType))
           .sort((a, b) => (a.label ?? a.name).localeCompare(b.label ?? b.name))
       )
     }
@@ -556,7 +556,7 @@ export default function BulkUploadPage() {
             dataTypes={
               pickerType === "ClassificationList"
                 ? ["ClassificationList"]
-                : ["SingleLineText", "MultiLineText"]
+                : ["SingleLineText", "MultiLineText", "Numeric"]
             }
           />
           <DialogFooter>

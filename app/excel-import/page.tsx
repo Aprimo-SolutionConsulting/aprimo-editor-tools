@@ -289,6 +289,18 @@ export default function ExcelImportPage() {
     return fieldDefs.find((d) => d.name === fieldName)?.dataType === "ClassificationList"
   })
 
+  const NUMERIC_TYPES = ["Numeric"]
+
+  const numericErrors: { col: string; fieldLabel: string; invalidValues: string[] }[] = mappableColumns.flatMap((col) => {
+    const fieldName = fieldMappings[col]
+    if (!fieldName) return []
+    const def = fieldDefs.find((d) => d.name === fieldName)
+    if (!def || !NUMERIC_TYPES.includes(def.dataType)) return []
+    const invalidValues = (columnValues[col] ?? []).filter((v) => v !== "" && isNaN(Number(v)))
+    if (!invalidValues.length) return []
+    return [{ col, fieldLabel: def.label ?? def.name, invalidValues }]
+  })
+
   async function handleSave() {
     if (!client || !recordIdColumn || !languageId) return
 
@@ -355,7 +367,12 @@ export default function ExcelImportPage() {
     setSaveProgress(null)
   }
 
-  const canSave = !saving && !!recordIdColumn && !!languageId && rows.length > 0 && mappableColumns.some((c) => fieldMappings[c])
+  const hasReadOnlyMapped = mappableColumns.some((col) => {
+    const def = fieldDefs.find((d) => d.name === fieldMappings[col])
+    return def?.isReadOnly
+  })
+
+  const canSave = !saving && !!recordIdColumn && !!languageId && rows.length > 0 && mappableColumns.some((c) => fieldMappings[c]) && numericErrors.length === 0 && !hasReadOnlyMapped
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -473,12 +490,17 @@ export default function ExcelImportPage() {
                               </SelectTrigger>
                               <SelectContent>
                                 {fieldDefs.map((d) => {
-                                  const tested = ["SingleLineText", "MultiLineText", "ClassificationList"].includes(d.dataType)
+                                  const tested = ["SingleLineText", "MultiLineText", "ClassificationList", "Numeric"].includes(d.dataType)
                                   return (
-                                    <SelectItem key={d.id} value={d.name} className="text-xs">
+                                    <SelectItem key={d.id} value={d.name} className="text-xs" disabled={!!d.isReadOnly}>
                                       <span className="flex items-center gap-2">
                                         {d.label ?? d.name}
-                                        {!tested && (
+                                        {d.isReadOnly && (
+                                          <span className="text-[10px] font-medium px-1 py-0.5 rounded bg-muted text-muted-foreground">
+                                            read only
+                                          </span>
+                                        )}
+                                        {!tested && !d.isReadOnly && (
                                           <span className="text-[10px] font-medium px-1 py-0.5 rounded bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
                                             not tested ({d.dataType})
                                           </span>
@@ -549,11 +571,36 @@ export default function ExcelImportPage() {
               )
             })}
 
+            {/* Read-only field warning */}
+            {hasReadOnlyMapped && (
+              <div className="rounded-md border border-destructive/50 bg-destructive/5 p-4">
+                <p className="text-sm font-medium text-destructive">
+                  One or more mapped fields are read-only and cannot be imported. Remove them from your field mappings to continue.
+                </p>
+              </div>
+            )}
+
+            {/* Numeric validation errors */}
+            {numericErrors.length > 0 && (
+              <div className="rounded-md border border-destructive/50 bg-destructive/5 p-4 space-y-2">
+                <p className="text-sm font-medium text-destructive">
+                  Fix non-numeric values before saving, then re-upload the file:
+                </p>
+                {numericErrors.map(({ col, fieldLabel, invalidValues }) => (
+                  <div key={col} className="text-sm">
+                    <span className="font-mono font-medium">{col}</span>
+                    <span className="text-muted-foreground"> → {fieldLabel}: </span>
+                    <span className="text-destructive">{invalidValues.join(", ")}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* Save */}
             {mappableColumns.length > 0 && (
               <div className="flex items-center gap-4 pt-2">
                 <Button onClick={handleSave} disabled={!canSave}>
-                  {saving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving…</> : "Save"}
+                  {saving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Uploading…</> : "Upload"}
                 </Button>
                 {saving && saveProgress && (
                   <p className="text-sm text-muted-foreground">
