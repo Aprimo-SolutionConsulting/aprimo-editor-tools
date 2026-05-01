@@ -8,7 +8,13 @@ import { useAprimo } from "@/context/aprimo-context"
 import { Expander } from "aprimo-js"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { ZoomIn, ZoomOut, Play, Pause, Volume2, VolumeX, RotateCcw } from "lucide-react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Progress } from "@/components/ui/progress"
+import { Slider } from "@/components/ui/slider"
+import { Separator } from "@/components/ui/separator"
+import { ZoomIn, ZoomOut, Play, Pause, Volume2, VolumeX, RotateCcw, Loader2, Video } from "lucide-react"
+import { toast } from "sonner"
 import type { AprimoRecord } from "@/models/aprimo"
 
 const PLATFORMS: Record<string, { label: string; width: number; height: number }[]> = {
@@ -104,7 +110,7 @@ function VideoResizerContent() {
 
   const [isProcessing, setIsProcessing] = useState(false)
   const [progress, setProgress] = useState<string | null>(null)
-  const [renditionSuccess, setRenditionSuccess] = useState(false)
+  const [progressPct, setProgressPct] = useState(0)
 
   const formats = PLATFORMS[platform]
   const selectedFormat = formats[formatIndex] ?? formats[0]
@@ -224,7 +230,9 @@ function VideoResizerContent() {
     setProgress("Loading FFmpeg…")
     const ffmpeg = new FFmpeg()
     ffmpeg.on("progress", ({ progress: p }) => {
-      setProgress(`Processing… ${Math.round(p * 100)}%`)
+      const pct = Math.round(p * 100)
+      setProgress(`Processing… ${pct}%`)
+      setProgressPct(pct)
     })
 
     const baseURL = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd"
@@ -259,7 +267,7 @@ function VideoResizerContent() {
   async function handleCreateRendition() {
     if (!client || !recordId) return
     setIsProcessing(true)
-    setRenditionSuccess(false)
+    setProgressPct(0)
     setError(null)
 
     try {
@@ -267,15 +275,20 @@ function VideoResizerContent() {
 
       setProgress("Uploading…")
       const file = new File([blob], filename, { type: blob.type })
+      setProgress("Uploading…")
+      setProgressPct(0)
       const uploadResult = await client.uploader.uploadFile(file, {
         onProgress: (uploaded, total) => {
-          setProgress(`Uploading… ${Math.round((uploaded / total) * 100)}%`)
+          const pct = Math.round((uploaded / total) * 100)
+          setProgress(`Uploading… ${pct}%`)
+          setProgressPct(pct)
         },
       })
       if (!uploadResult.ok) throw new Error(uploadResult.error?.message ?? "Upload failed")
       const token = uploadResult.data!.token
 
       setProgress("Saving to Aprimo…")
+      setProgressPct(95)
       if (!additionalFilesHref) throw new Error("No additionalfiles endpoint available")
 
       const authHeader = getAuthHeader()
@@ -299,11 +312,14 @@ function VideoResizerContent() {
       }
 
       setProgress(null)
-      setRenditionSuccess(true)
-      setTimeout(() => setRenditionSuccess(false), 4000)
+      setProgressPct(0)
+      toast.success("Rendition saved", { description: `${platform} — ${selectedFormat.label} attached to the asset` })
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Rendition creation failed")
+      const msg = err instanceof Error ? err.message : "Rendition creation failed"
+      setError(msg)
       setProgress(null)
+      setProgressPct(0)
+      toast.error("Rendition failed", { description: msg })
     } finally {
       setIsProcessing(false)
     }
@@ -311,6 +327,7 @@ function VideoResizerContent() {
 
   async function handleCreateAndDownload() {
     setIsProcessing(true)
+    setProgressPct(0)
     setError(null)
 
     try {
@@ -324,9 +341,14 @@ function VideoResizerContent() {
       a.click()
       URL.revokeObjectURL(url)
       setProgress(null)
+      setProgressPct(0)
+      toast.success("Download started", { description: filename })
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Processing failed")
+      const msg = err instanceof Error ? err.message : "Processing failed"
+      setError(msg)
       setProgress(null)
+      setProgressPct(0)
+      toast.error("Processing failed", { description: msg })
     } finally {
       setIsProcessing(false)
     }
@@ -343,174 +365,249 @@ function VideoResizerContent() {
     : MAX_PREVIEW_H
 
   return (
-    <div className="flex flex-col" style={{ height: "calc(100vh - 3.5rem)" }}>
-      <div className="flex flex-1 overflow-hidden">
+    <main className="flex-1 flex flex-col min-h-0">
+      <div className="flex flex-1 min-h-0 gap-6 p-8 overflow-hidden">
 
-        {/* Video area */}
-        <div className="flex-1 bg-muted/30 flex flex-col items-center justify-center gap-4">
-          {loading && <p className="text-sm text-muted-foreground">{loadingMessage}</p>}
-          {error && <p className="text-sm text-destructive px-8 text-center">{error}</p>}
-          {!recordId && <p className="text-sm text-muted-foreground">No record ID provided.</p>}
-
-          {videoUrl && (
-            <>
-              <div
-                className="relative overflow-hidden bg-black rounded shadow-lg"
-                style={{ width: previewW, height: previewH }}
-              >
-                <video
-                  key={videoUrl}
-                  ref={videoRef}
-                  src={videoUrl}
-                  preload="auto"
-                  className="absolute inset-0 w-full h-full"
-                  style={{
-                    objectFit: cropMode === "fill" ? "cover" : "contain",
-                    transform: `scale(${zoom / 100}) rotate(${rotation}deg)`,
-                    transformOrigin: "center",
-                  }}
-                  onLoadedMetadata={(e) => {
-                    const v = e.currentTarget
-                    setDuration(v.duration)
-                    setVideoSize({ width: v.videoWidth, height: v.videoHeight })
-                  }}
-                  onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
-                  onEnded={() => setIsPlaying(false)}
-                />
+        {/* Video card */}
+        <Card className="flex-1 flex flex-col overflow-hidden">
+          <CardHeader className="pb-3 shrink-0">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Video className="h-4 w-4 text-muted-foreground" />
+              Preview
+              {videoSize && (
+                <Badge variant="secondary" className="ml-auto font-mono text-xs">
+                  {videoSize.width}×{videoSize.height}
+                </Badge>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <Separator />
+          <CardContent className="flex-1 flex flex-col items-center justify-center gap-4 p-6 overflow-hidden">
+            {loading && (
+              <div className="flex flex-col items-center gap-3 text-muted-foreground">
+                <Loader2 className="h-8 w-8 animate-spin" />
+                <p className="text-sm">{loadingMessage}</p>
               </div>
+            )}
+            {!loading && error && (
+              <p className="text-sm text-destructive text-center max-w-sm">{error}</p>
+            )}
+            {!loading && !recordId && (
+              <p className="text-sm text-muted-foreground">No record ID provided.</p>
+            )}
 
-              {/* Playback controls */}
-              <div className="flex items-center gap-4 text-foreground">
-                <button onClick={toggleMute} className="text-muted-foreground hover:text-foreground transition-colors">
-                  {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
-                </button>
-                <button onClick={togglePlay} className="text-foreground hover:text-foreground/80 transition-colors">
-                  {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
-                </button>
-                <span className="text-sm text-muted-foreground font-mono tabular-nums">
-                  {formatTime(currentTime)} / <span className="font-bold text-foreground">{formatTime(duration)}</span>
-                </span>
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* Right panel */}
-        <div className="w-72 bg-background border-l border-border flex flex-col gap-8 p-5 overflow-y-auto shrink-0">
-
-          {/* Resize for */}
-          <div className="space-y-2">
-            <p className="text-xs text-muted-foreground text-center tracking-wide uppercase">Resize for</p>
-            <Select value={platform} onValueChange={(v) => { setPlatform(v); setFormatIndex(0) }}>
-              <SelectTrigger className="text-sm h-9">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.keys(PLATFORMS).map((p) => (
-                  <SelectItem key={p} value={p}>{p}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={String(formatIndex)} onValueChange={(v) => setFormatIndex(Number(v))}>
-              <SelectTrigger className="text-sm h-9">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {formats.map((f, i) => (
-                  <SelectItem key={i} value={String(i)}>{f.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Crop options */}
-          <div className="space-y-3">
-            <p className="text-xs text-muted-foreground text-center tracking-wide uppercase">Crop options</p>
-            <div className="grid grid-cols-2 gap-2">
-              {(["fill", "fit"] as const).map((mode) => (
-                <button
-                  key={mode}
-                  onClick={() => setCropMode(mode)}
-                  className={`py-2 rounded text-sm font-medium capitalize border transition-colors ${
-                    cropMode === mode
-                      ? "bg-primary text-primary-foreground border-primary"
-                      : "bg-background text-muted-foreground border-border hover:bg-muted"
-                  }`}
+            {videoUrl && (
+              <>
+                <div
+                  className="relative overflow-hidden bg-black rounded-md shadow"
+                  style={{ width: previewW, height: previewH }}
                 >
-                  {mode}
-                </button>
-              ))}
+                  <video
+                    key={videoUrl}
+                    ref={videoRef}
+                    src={videoUrl}
+                    preload="auto"
+                    className="absolute inset-0 w-full h-full"
+                    style={{
+                      objectFit: cropMode === "fill" ? "cover" : "contain",
+                      transform: `scale(${zoom / 100}) rotate(${rotation}deg)`,
+                      transformOrigin: "center",
+                    }}
+                    onLoadedMetadata={(e) => {
+                      const v = e.currentTarget
+                      setDuration(v.duration)
+                      setVideoSize({ width: v.videoWidth, height: v.videoHeight })
+                    }}
+                    onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+                    onEnded={() => setIsPlaying(false)}
+                  />
+                </div>
+
+                {/* Seek bar */}
+                <div className="w-full max-w-lg space-y-1">
+                  <input
+                    type="range"
+                    min={0}
+                    max={duration || 1}
+                    step={0.1}
+                    value={currentTime}
+                    onChange={(e) => {
+                      const t = parseFloat(e.target.value)
+                      if (videoRef.current) videoRef.current.currentTime = t
+                      setCurrentTime(t)
+                    }}
+                    className="w-full h-1.5 accent-primary cursor-pointer"
+                  />
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground font-mono tabular-nums">{formatTime(currentTime)}</span>
+                    <div className="flex items-center gap-3">
+                      <button onClick={toggleMute} className="text-muted-foreground hover:text-foreground transition-colors">
+                        {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+                      </button>
+                      <button onClick={togglePlay} className="text-foreground hover:text-foreground/80 transition-colors">
+                        {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
+                      </button>
+                    </div>
+                    <span className="text-xs text-muted-foreground font-mono tabular-nums">{formatTime(duration)}</span>
+                  </div>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Controls card */}
+        <Card className="w-72 shrink-0 flex flex-col overflow-hidden">
+          <CardHeader className="pb-3 shrink-0">
+            <CardTitle className="text-base">Settings</CardTitle>
+          </CardHeader>
+          <Separator />
+          <CardContent className="flex-1 overflow-y-auto p-5 space-y-6">
+
+            {/* Platform & format */}
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Resize for</p>
+              <Select value={platform} onValueChange={(v) => { setPlatform(v); setFormatIndex(0) }}>
+                <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {Object.keys(PLATFORMS).map((p) => (
+                    <SelectItem key={p} value={p}>{p}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={String(formatIndex)} onValueChange={(v) => setFormatIndex(Number(v))}>
+                <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {formats.map((f, i) => (
+                    <SelectItem key={i} value={String(i)}>{f.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground text-right">
+                {selectedFormat.width}×{selectedFormat.height}
+              </p>
             </div>
+
+            <Separator />
+
+            {/* Crop mode */}
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Crop mode</p>
+              <div className="grid grid-cols-2 gap-2">
+                {(["fill", "fit"] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    onClick={() => setCropMode(mode)}
+                    className={`py-2 rounded-md text-sm font-medium capitalize border transition-colors ${
+                      cropMode === mode
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "border-border text-muted-foreground hover:bg-muted"
+                    }`}
+                  >
+                    {mode}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <Separator />
 
             {/* Zoom */}
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setZoom((z) => Math.max(10, z - 10))}
-                className="text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <ZoomOut className="h-4 w-4" />
-              </button>
-              <span className="flex-1 text-center text-sm tabular-nums">{zoom}%</span>
-              <button
-                onClick={() => setZoom((z) => Math.min(300, z + 10))}
-                className="text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <ZoomIn className="h-4 w-4" />
-              </button>
-              <span className="w-px h-4 bg-border mx-1" />
-              <span className="text-sm tabular-nums w-8 text-center">{rotation}°</span>
-              <button
-                onClick={() => setRotation((r) => (r + 90) % 360)}
-                className="text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <RotateCcw className="h-4 w-4" />
-              </button>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Zoom</p>
+                <span className="text-xs font-mono text-muted-foreground">{zoom}%</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <ZoomOut className="h-4 w-4 text-muted-foreground shrink-0" />
+                <Slider
+                  min={10}
+                  max={300}
+                  step={5}
+                  value={[zoom]}
+                  onValueChange={([v]) => setZoom(v)}
+                  className="flex-1"
+                />
+                <ZoomIn className="h-4 w-4 text-muted-foreground shrink-0" />
+              </div>
             </div>
+
+            {/* Rotation */}
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Rotation</p>
+              <div className="flex gap-2">
+                {[0, 90, 180, 270].map((deg) => (
+                  <button
+                    key={deg}
+                    onClick={() => setRotation(deg)}
+                    className={`flex-1 py-1.5 rounded-md text-xs font-medium border transition-colors ${
+                      rotation === deg
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "border-border text-muted-foreground hover:bg-muted"
+                    }`}
+                  >
+                    {deg}°
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Output format */}
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Output format</p>
+              <div className="grid grid-cols-3 gap-2">
+                {OUTPUT_FORMATS.map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setOutputFormat(f)}
+                    className={`py-2 rounded-md text-sm font-medium border transition-colors ${
+                      outputFormat === f
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "border-border text-muted-foreground hover:bg-muted"
+                    }`}
+                  >
+                    {f}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Action bar */}
+      <div className="sticky bottom-0 border-t border-border bg-background px-8 shrink-0 z-10">
+        {isProcessing && progressPct > 0 && (
+          <Progress value={progressPct} className="h-0.5 rounded-none" />
+        )}
+        <div className="h-14 flex items-center justify-between">
+          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+            {isProcessing && progress ? (
+              <span className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                {progress}
+              </span>
+            ) : (
+              <>
+                {videoSize && <Badge variant="outline">Source {videoSize.width}×{videoSize.height}</Badge>}
+                <Badge variant="outline">Output {selectedFormat.width}×{selectedFormat.height}</Badge>
+              </>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" className="h-8 px-4 text-sm" disabled={isProcessing || !videoUrl} onClick={handleCreateAndDownload}>
+              Create & Download
+            </Button>
+            <Button className="h-8 px-6 text-sm" disabled={isProcessing || !videoUrl} onClick={handleCreateRendition}>
+              {isProcessing ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Processing…</> : "Create Rendition"}
+            </Button>
           </div>
         </div>
       </div>
-
-      {/* Bottom bar */}
-      <div className="sticky bottom-0 h-12 bg-background border-t border-border flex items-center justify-between px-6 shrink-0 z-10">
-        <div className="flex items-center gap-6 text-sm text-muted-foreground">
-          {videoSize && (
-            <span>
-              Video size, px —{" "}
-              <span className="text-foreground">{videoSize.width}×{videoSize.height}</span>
-            </span>
-          )}
-          <span className="flex items-center gap-2">
-            Format —
-            <select
-              value={outputFormat}
-              onChange={(e) => setOutputFormat(e.target.value)}
-              className="bg-transparent text-foreground border-none outline-none text-sm cursor-pointer"
-            >
-              {OUTPUT_FORMATS.map((f) => <option key={f} value={f}>{f}</option>)}
-            </select>
-          </span>
-          {progress && <span className="text-foreground font-medium">{progress}</span>}
-          {renditionSuccess && <span className="text-green-600 font-medium">Rendition saved to Aprimo</span>}
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            className="h-8 px-4 text-sm"
-            disabled={isProcessing || !videoUrl}
-            onClick={handleCreateAndDownload}
-          >
-            {isProcessing ? "Processing…" : "Create & Download"}
-          </Button>
-          <Button
-            className="h-8 px-6 text-sm"
-            disabled={isProcessing || !videoUrl}
-            onClick={handleCreateRendition}
-          >
-            {isProcessing ? "Processing…" : "Create Rendition"}
-          </Button>
-        </div>
-      </div>
-    </div>
+    </main>
   )
 }
 
