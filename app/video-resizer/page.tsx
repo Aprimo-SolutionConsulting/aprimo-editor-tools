@@ -79,7 +79,7 @@ function buildVfFilter(
 function VideoResizerContent() {
   const searchParams = useSearchParams()
   const recordId = searchParams.get("record")
-  const { client, isConnected } = useAprimo()
+  const { client, isConnected, getAuthHeader } = useAprimo()
   const [loadingMessage, setLoadingMessage] = useState("Loading…")
 
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -100,8 +100,7 @@ function VideoResizerContent() {
   const [rotation, setRotation] = useState(0)
   const [outputFormat, setOutputFormat] = useState("MP4")
 
-  const [masterFileId, setMasterFileId] = useState<string | null>(null)
-  const [fileVersionId, setFileVersionId] = useState<string | null>(null)
+  const [additionalFilesHref, setAdditionalFilesHref] = useState<string | null>(null)
 
   const [isProcessing, setIsProcessing] = useState(false)
   const [progress, setProgress] = useState<string | null>(null)
@@ -138,17 +137,8 @@ function VideoResizerContent() {
         if (!record) throw new Error("Record not found")
 
         const masterFile = record._embedded?.masterfilelatestversion
-        if (masterFile?.id) setFileVersionId(masterFile.id)
-
-        // Parse master file ID + version ID from the additionalfiles link URL
-        const additionalFilesHref = masterFile?._links?.["additionalfiles"]?.href
-        if (additionalFilesHref) {
-          const match = additionalFilesHref.match(/\/masterfile\/([^/]+)\/version\/([^/]+)\//)
-          if (match) {
-            setMasterFileId(match[1])
-            setFileVersionId(match[2])
-          }
-        }
+        const href = masterFile?._links?.["additionalfiles"]?.href
+        if (href) setAdditionalFilesHref(href)
 
         // Create a download order to get a direct video URL
         setLoadingMessage("Creating download order…")
@@ -286,29 +276,27 @@ function VideoResizerContent() {
       const token = uploadResult.data!.token
 
       setProgress("Saving to Aprimo…")
-      if (!masterFileId || !fileVersionId) throw new Error("Could not determine file/version IDs")
+      if (!additionalFilesHref) throw new Error("No additionalfiles endpoint available")
 
-      const updateResult = await client.records.update(recordId, {
-        files: {
-          addOrUpdate: [{
-            id: masterFileId,
-            versions: {
-              addOrUpdate: [{
-                id: fileVersionId,
-                additionalFiles: {
-                  addOrUpdate: [{
-                    id: token,
-                    label: `${platform} — ${selectedFormat.label}`,
-                    filename,
-                    type: "rendition",
-                  }],
-                },
-              }],
-            },
-          }],
+      const authHeader = getAuthHeader()
+      const attachRes = await fetch(additionalFilesHref, {
+        method: "POST",
+        headers: {
+          "API-VERSION": "1",
+          "Content-Type": "application/json",
+          ...(authHeader ? { Authorization: authHeader } : {}),
         },
-      } as never)
-      if (!updateResult.ok) throw new Error(updateResult.error?.message ?? "Failed to attach rendition")
+        body: JSON.stringify({
+          id: token,
+          label: `${platform} — ${selectedFormat.label}`,
+          filename,
+          type: "rendition",
+        }),
+      })
+      if (!attachRes.ok) {
+        const msg = await attachRes.text().catch(() => attachRes.statusText)
+        throw new Error(`Failed to attach rendition: ${msg}`)
+      }
 
       setProgress(null)
       setRenditionSuccess(true)
