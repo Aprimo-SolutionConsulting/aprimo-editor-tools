@@ -17,6 +17,7 @@ interface Props {
   value: ClassificationSelection[]
   onChange: (next: ClassificationSelection[]) => void
   disabled?: boolean
+  languageId?: string
 }
 
 export function ClassificationValuePicker({
@@ -26,16 +27,21 @@ export function ClassificationValuePicker({
   value,
   onChange,
   disabled,
+  languageId,
 }: Props) {
   const [open, setOpen] = useState(false)
 
   const flatNodes = useMemo(() => {
     if (rootId) {
       const tree = buildClassificationTree(rootId, allClassifications)
-      if (tree) return flattenForPicker(tree)
+      if (tree) return flattenForPicker(tree, 0, languageId)
     }
-    return allClassifications.map((c) => ({ id: c.id, label: c.labelPath || c.name, depth: 0 }))
-  }, [rootId, allClassifications])
+    return allClassifications.map((c) => ({
+      id: c.id,
+      label: (languageId ? c.labels?.find((l) => l.languageId === languageId)?.value : null) ?? c.labelPath ?? c.name,
+      depth: 0,
+    }))
+  }, [rootId, allClassifications, languageId])
 
   const selectedIds = new Set(value.map((v) => v.id))
 

@@ -296,6 +296,7 @@ export default function BulkUploadPage() {
             value={cell.classifications}
             onChange={(next) => updateCell(item.uid, col.uid, { classifications: next })}
             disabled={disabled}
+            languageId={languageId || undefined}
           />
         </div>
       )
@@ -377,6 +378,7 @@ export default function BulkUploadPage() {
                       allClassifications={allClassifications}
                       value={col.sharedClassifications}
                       onChange={(next) => updateCol(col.uid, { sharedClassifications: next })}
+                      languageId={languageId || undefined}
                     />
                   ) : col.dataType === "MultiLineText" ? (
                     <Textarea

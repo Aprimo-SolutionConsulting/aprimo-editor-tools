@@ -35,9 +35,17 @@ export interface FlatNode {
   depth: number
 }
 
-export function flattenForPicker(tree: ClassificationTreeNode, depth = 0): FlatNode[] {
-  const result: FlatNode[] = [{ id: tree.id, label: tree.name, depth }]
-  for (const child of tree.children) result.push(...flattenForPicker(child, depth + 1))
+function localizedLabel(node: ClassificationNode, languageId?: string): string {
+  if (languageId) {
+    const loc = node.labels?.find((l) => l.languageId === languageId)?.value
+    if (loc) return loc
+  }
+  return node.name
+}
+
+export function flattenForPicker(tree: ClassificationTreeNode, depth = 0, languageId?: string): FlatNode[] {
+  const result: FlatNode[] = [{ id: tree.id, label: localizedLabel(tree, languageId), depth }]
+  for (const child of tree.children) result.push(...flattenForPicker(child, depth + 1, languageId))
   return result
 }
 
