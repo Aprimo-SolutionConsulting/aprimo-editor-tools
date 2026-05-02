@@ -32,6 +32,10 @@ import {
   emptyCell,
 } from "@/lib/bulk-upload"
 
+const BROWSER_RENDERABLE_IMAGE_TYPES = new Set([
+  "image/jpeg", "image/png", "image/gif", "image/webp", "image/svg+xml", "image/avif",
+])
+
 export default function BulkUploadPage() {
   const router = useRouter()
   const { client, isConnected } = useAprimo()
@@ -107,7 +111,7 @@ export default function BulkUploadPage() {
       return {
         uid: newUid(),
         file,
-        thumbnailUrl: file.type.startsWith("image/") ? URL.createObjectURL(file) : null,
+        thumbnailUrl: BROWSER_RENDERABLE_IMAGE_TYPES.has(file.type) ? URL.createObjectURL(file) : null,
         values,
         progress: 0,
         status: "pending" as const,
