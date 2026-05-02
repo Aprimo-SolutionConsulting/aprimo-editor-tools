@@ -15,7 +15,6 @@ import { Slider } from "@/components/ui/slider"
 import { Separator } from "@/components/ui/separator"
 import { ZoomIn, ZoomOut, Play, Pause, Volume2, VolumeX, RotateCcw, Loader2, Video } from "lucide-react"
 import { toast } from "sonner"
-import type { AprimoRecord } from "@/models/aprimo"
 
 const PLATFORMS: Record<string, { label: string; width: number; height: number }[]> = {
   Instagram: [
@@ -85,7 +84,7 @@ function buildVfFilter(
 function VideoResizerContent() {
   const searchParams = useSearchParams()
   const recordId = searchParams.get("record")
-  const { client, isConnected, getAuthHeader } = useAprimo()
+  const { client, isConnected } = useAprimo()
   const [loadingMessage, setLoadingMessage] = useState("Loading…")
 
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -106,7 +105,8 @@ function VideoResizerContent() {
   const [rotation, setRotation] = useState(0)
   const [outputFormat, setOutputFormat] = useState("MP4")
 
-  const [additionalFilesHref, setAdditionalFilesHref] = useState<string | null>(null)
+  const [masterFileId, setMasterFileId] = useState<string | null>(null)
+  const [latestVersionId, setLatestVersionId] = useState<string | null>(null)
 
   const [isProcessing, setIsProcessing] = useState(false)
   const [progress, setProgress] = useState<string | null>(null)
@@ -122,10 +122,11 @@ function VideoResizerContent() {
       setLoading(true)
       setError(null)
       try {
-        // Load record to extract file/version IDs for rendition attachment
+        // Load record to extract masterfile + version IDs for rendition attachment
         setLoadingMessage("Loading record…")
-        const expander = Expander.create()
-        ;(expander.for("record") as { expand: (...f: string[]) => Expander }).expand("masterfilelatestversion")
+        const expander = (Expander.create() as any)
+          .for("Record").expand("masterfile")
+          .for("File").expand("fileversions")
 
         const result = await client!.search.records(
           { searchExpression: { expression: `id='${recordId}'` } },
@@ -133,18 +134,14 @@ function VideoResizerContent() {
         )
         if (!result.ok) throw new Error(result.error?.message ?? "Failed to load record")
 
-        type FileVersionWithLinks = {
-          id?: string
-          _links?: Record<string, { href: string }>
-        }
-        const record = (result.data?.items?.[0]) as unknown as AprimoRecord & {
-          _embedded?: { masterfilelatestversion?: FileVersionWithLinks }
-        }
+        const record = result.data?.items?.[0] as any
         if (!record) throw new Error("Record not found")
 
-        const masterFile = record._embedded?.masterfilelatestversion
-        const href = masterFile?._links?.["additionalfiles"]?.href
-        if (href) setAdditionalFilesHref(href)
+        const masterFile = record._embedded?.masterfile
+        const versions: any[] = masterFile?._embedded?.fileversions?.items ?? []
+        const latestVersion = versions.find((v: any) => v.isLatest)
+        if (masterFile?.id) setMasterFileId(masterFile.id)
+        if (latestVersion?.id) setLatestVersionId(latestVersion.id)
 
         // Create a download order to get a direct video URL
         setLoadingMessage("Creating download order…")
@@ -289,27 +286,35 @@ function VideoResizerContent() {
 
       setProgress("Saving to Aprimo…")
       setProgressPct(95)
-      if (!additionalFilesHref) throw new Error("No additionalfiles endpoint available")
+      if (!masterFileId || !latestVersionId) throw new Error("Master file info not available")
 
-      const authHeader = getAuthHeader()
-      const attachRes = await fetch(additionalFilesHref, {
-        method: "POST",
-        headers: {
-          "API-VERSION": "1",
-          "Content-Type": "application/json",
-          ...(authHeader ? { Authorization: authHeader } : {}),
+      const updateRes = await client!.records.update(recordId!, {
+        files: {
+          addOrUpdate: [
+            {
+              id: masterFileId,
+              versions: {
+                addOrUpdate: [
+                  {
+                    id: latestVersionId,
+                    additionalFiles: {
+                      addOrUpdate: [
+                        {
+                          id: token,
+                          label: `${platform} — ${selectedFormat.label}`,
+                          filename,
+                          type: "Custom",
+                        },
+                      ],
+                    },
+                  },
+                ],
+              },
+            },
+          ],
         },
-        body: JSON.stringify({
-          id: token,
-          label: `${platform} — ${selectedFormat.label}`,
-          filename,
-          type: "rendition",
-        }),
-      })
-      if (!attachRes.ok) {
-        const msg = await attachRes.text().catch(() => attachRes.statusText)
-        throw new Error(`Failed to attach rendition: ${msg}`)
-      }
+      } as never)
+      if (!updateRes.ok) throw new Error(updateRes.error?.message ?? "Failed to attach rendition")
 
       setProgress(null)
       setProgressPct(0)
