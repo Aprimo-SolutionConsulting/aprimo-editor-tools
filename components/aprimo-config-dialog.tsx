@@ -7,11 +7,51 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Pencil, Trash2, Plus, ArrowLeft } from "lucide-react"
 
 const ENV_ENVIRONMENT = process.env.NEXT_PUBLIC_APRIMO_ENVIRONMENT ?? ""
 const ENV_CLIENT_ID = process.env.NEXT_PUBLIC_APRIMO_CLIENT_ID ?? ""
 const ENV_CLIENT_SECRET = process.env.NEXT_PUBLIC_APRIMO_CLIENT_SECRET ?? ""
 const ALL_FROM_ENV = !!(ENV_ENVIRONMENT && ENV_CLIENT_ID && ENV_CLIENT_SECRET)
+
+interface ConnectionProfile {
+  id: string
+  name: string
+  environment: string
+  clientId: string
+  clientSecret: string
+}
+
+const PROFILES_KEY = "aprimo_profiles"
+
+function loadProfiles(): ConnectionProfile[] {
+  try {
+    const oldEnv = localStorage.getItem("aprimo_environment")
+    const oldCid = localStorage.getItem("aprimo_client_id")
+    if (oldEnv && oldCid && !localStorage.getItem(PROFILES_KEY)) {
+      const migrated: ConnectionProfile[] = [{
+        id: crypto.randomUUID(),
+        name: oldEnv,
+        environment: oldEnv,
+        clientId: oldCid,
+        clientSecret: localStorage.getItem("aprimo_client_secret") ?? "",
+      }]
+      localStorage.setItem(PROFILES_KEY, JSON.stringify(migrated))
+      localStorage.removeItem("aprimo_environment")
+      localStorage.removeItem("aprimo_client_id")
+      localStorage.removeItem("aprimo_client_secret")
+      return migrated
+    }
+    const raw = localStorage.getItem(PROFILES_KEY)
+    return raw ? JSON.parse(raw) : []
+  } catch {
+    return []
+  }
+}
+
+function persistProfiles(profiles: ConnectionProfile[]) {
+  localStorage.setItem(PROFILES_KEY, JSON.stringify(profiles))
+}
 
 function startOAuth(environment: string, clientId: string, clientSecret: string) {
   generatePKCE().then(({ codeVerifier, codeChallenge }) => {
@@ -25,24 +65,31 @@ function startOAuth(environment: string, clientId: string, clientSecret: string)
   })
 }
 
+type View = "list" | "edit"
+
 export function AprimoConfigDialog() {
   const { isConnected } = useAprimo()
   const [open, setOpen] = useState(false)
-  const [environment, setEnvironment] = useState("")
-  const [clientId, setClientId] = useState("")
-  const [clientSecret, setClientSecret] = useState("")
+  const [profiles, setProfiles] = useState<ConnectionProfile[]>([])
+  const [view, setView] = useState<View>("list")
+  const [editing, setEditing] = useState<ConnectionProfile | null>(null)
+  const [formName, setFormName] = useState("")
+  const [formEnvironment, setFormEnvironment] = useState("")
+  const [formClientId, setFormClientId] = useState("")
+  const [formClientSecret, setFormClientSecret] = useState("")
   const hasAttempted = useRef(false)
 
-  function openWithCurrentValues() {
-    setEnvironment(ENV_ENVIRONMENT || (localStorage.getItem("aprimo_environment") ?? ""))
-    setClientId(ENV_CLIENT_ID || (localStorage.getItem("aprimo_client_id") ?? ""))
-    setClientSecret(ENV_CLIENT_SECRET || (localStorage.getItem("aprimo_client_secret") ?? ""))
+  function openDialog() {
+    const loaded = loadProfiles()
+    setProfiles(loaded)
+    setView("list")
+    setEditing(null)
     setOpen(true)
   }
 
   useEffect(() => {
-    window.addEventListener("aprimo:open-config", openWithCurrentValues)
-    return () => window.removeEventListener("aprimo:open-config", openWithCurrentValues)
+    window.addEventListener("aprimo:open-config", openDialog)
+    return () => window.removeEventListener("aprimo:open-config", openDialog)
   }, [])
 
   useEffect(() => {
@@ -54,7 +101,7 @@ export function AprimoConfigDialog() {
       params.delete("auth_failed")
       const newSearch = params.toString()
       history.replaceState(null, "", window.location.pathname + (newSearch ? `?${newSearch}` : ""))
-      openWithCurrentValues()
+      openDialog()
       return
     }
 
@@ -66,86 +113,204 @@ export function AprimoConfigDialog() {
       return
     }
 
-    const env = localStorage.getItem("aprimo_environment")
-    const cid = localStorage.getItem("aprimo_client_id")
-    const secret = localStorage.getItem("aprimo_client_secret") ?? ""
-    if (!env || !cid) {
-      openWithCurrentValues()
+    const loaded = loadProfiles()
+    setProfiles(loaded)
+    if (loaded.length === 1) {
+      startOAuth(loaded[0].environment, loaded[0].clientId, loaded[0].clientSecret)
     } else {
-      startOAuth(env, cid, secret)
+      setView("list")
+      setOpen(true)
     }
   }, [isConnected])
 
-  function handleConnect() {
-    const env = ENV_ENVIRONMENT || environment.trim()
-    const cid = ENV_CLIENT_ID || clientId.trim()
-    const secret = ENV_CLIENT_SECRET || clientSecret.trim()
-    if (!ALL_FROM_ENV) {
-      localStorage.setItem("aprimo_environment", env)
-      localStorage.setItem("aprimo_client_id", cid)
-      localStorage.setItem("aprimo_client_secret", secret)
-    }
+  function connectProfile(profile: ConnectionProfile) {
     setOpen(false)
-    startOAuth(env, cid, secret)
+    startOAuth(profile.environment, profile.clientId, profile.clientSecret)
+  }
+
+  function openNew() {
+    setEditing(null)
+    setFormName("")
+    setFormEnvironment("")
+    setFormClientId("")
+    setFormClientSecret("")
+    setView("edit")
+  }
+
+  function openEdit(profile: ConnectionProfile) {
+    setEditing(profile)
+    setFormName(profile.name)
+    setFormEnvironment(profile.environment)
+    setFormClientId(profile.clientId)
+    setFormClientSecret(profile.clientSecret)
+    setView("edit")
+  }
+
+  function buildUpdatedProfile(): ConnectionProfile {
+    return {
+      id: editing?.id ?? crypto.randomUUID(),
+      name: formName.trim() || formEnvironment.trim(),
+      environment: formEnvironment.trim(),
+      clientId: formClientId.trim(),
+      clientSecret: formClientSecret.trim(),
+    }
+  }
+
+  function saveProfile() {
+    const profile = buildUpdatedProfile()
+    const updated = editing
+      ? profiles.map((p) => (p.id === editing.id ? profile : p))
+      : [...profiles, profile]
+    persistProfiles(updated)
+    setProfiles(updated)
+    setView("list")
+  }
+
+  function saveAndConnect() {
+    const profile = buildUpdatedProfile()
+    const updated = editing
+      ? profiles.map((p) => (p.id === editing.id ? profile : p))
+      : [...profiles, profile]
+    persistProfiles(updated)
+    setOpen(false)
+    startOAuth(profile.environment, profile.clientId, profile.clientSecret)
+  }
+
+  function deleteProfile(id: string) {
+    const updated = profiles.filter((p) => p.id !== id)
+    persistProfiles(updated)
+    setProfiles(updated)
+  }
+
+  const formValid = !!(formEnvironment.trim() && formClientId.trim())
+
+  if (ALL_FROM_ENV) {
+    return (
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Aprimo Configuration</DialogTitle>
+            <DialogDescription>Connection is pre-configured via environment variables.</DialogDescription>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">Environment: <span className="font-mono">{ENV_ENVIRONMENT}</span></p>
+          <DialogFooter>
+            <Button onClick={() => { setOpen(false); startOAuth(ENV_ENVIRONMENT, ENV_CLIENT_ID, ENV_CLIENT_SECRET) }}>
+              Reconnect
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    )
   }
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Aprimo Configuration</DialogTitle>
-          <DialogDescription>
-            {ALL_FROM_ENV
-              ? "Connection is pre-configured via environment variables."
-              : "Enter your Aprimo credentials. These will be saved in your browser for future use."}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4 py-2">
-          <div className="space-y-1.5">
-            <Label htmlFor="config-environment">Environment</Label>
-            <Input
-              id="config-environment"
-              placeholder="yourcompany"
-              value={environment}
-              onChange={(e) => setEnvironment(e.target.value)}
-              disabled={!!ENV_ENVIRONMENT}
-            />
-            {!ENV_ENVIRONMENT && (
-              <p className="text-xs text-muted-foreground">
-                The subdomain of your Aprimo instance (e.g. <span className="font-mono">yourcompany</span> for yourcompany.aprimo.com)
-              </p>
-            )}
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="config-client-id">Client ID</Label>
-            <Input
-              id="config-client-id"
-              placeholder="your-client-id"
-              value={clientId}
-              onChange={(e) => setClientId(e.target.value)}
-              disabled={!!ENV_CLIENT_ID}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="config-client-secret">Client Secret</Label>
-            <Input
-              id="config-client-secret"
-              type="password"
-              placeholder="your-client-secret"
-              value={clientSecret}
-              onChange={(e) => setClientSecret(e.target.value)}
-              disabled={!!ENV_CLIENT_SECRET}
-            />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button
-            disabled={!ENV_ENVIRONMENT && !environment.trim() || !ENV_CLIENT_ID && !clientId.trim()}
-            onClick={handleConnect}
-          >
-            Connect
-          </Button>
-        </DialogFooter>
+        {view === "list" ? (
+          <>
+            <DialogHeader>
+              <DialogTitle>Aprimo Configuration</DialogTitle>
+              <DialogDescription>
+                {profiles.length === 0
+                  ? "Add a profile to get started."
+                  : "Select a profile to connect, or manage your saved profiles."}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-2 py-1 min-h-[60px]">
+              {profiles.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4">No profiles saved yet.</p>
+              )}
+              {profiles.map((p) => (
+                <div key={p.id} className="flex items-center gap-2 rounded-md border border-border px-3 py-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium truncate">{p.name}</div>
+                    <div className="text-xs text-muted-foreground font-mono truncate">{p.environment}.dam.aprimo.com</div>
+                  </div>
+                  <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" title="Edit" onClick={() => openEdit(p)}>
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0 text-destructive hover:text-destructive" title="Delete" onClick={() => deleteProfile(p.id)}>
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button size="sm" className="h-7 shrink-0" onClick={() => connectProfile(p)}>
+                    Connect
+                  </Button>
+                </div>
+              ))}
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={openNew}>
+                <Plus className="h-4 w-4" />
+                Add profile
+              </Button>
+            </DialogFooter>
+          </>
+        ) : (
+          <>
+            <DialogHeader>
+              <DialogTitle>{editing ? "Edit profile" : "Add profile"}</DialogTitle>
+              <DialogDescription>Enter your Aprimo environment and PKCE registration credentials.</DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="profile-name">Profile name</Label>
+                <Input
+                  id="profile-name"
+                  placeholder={formEnvironment || "My Aprimo"}
+                  value={formName}
+                  onChange={(e) => setFormName(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="profile-environment">Environment</Label>
+                <Input
+                  id="profile-environment"
+                  placeholder="yourcompany"
+                  value={formEnvironment}
+                  onChange={(e) => setFormEnvironment(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Subdomain of your Aprimo instance — <span className="font-mono">yourcompany</span> for yourcompany.dam.aprimo.com
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="profile-client-id">Client ID</Label>
+                <Input
+                  id="profile-client-id"
+                  placeholder="your-client-id"
+                  value={formClientId}
+                  onChange={(e) => setFormClientId(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="profile-client-secret">Client Secret</Label>
+                <Input
+                  id="profile-client-secret"
+                  type="password"
+                  placeholder="your-client-secret"
+                  value={formClientSecret}
+                  onChange={(e) => setFormClientSecret(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <DialogFooter className="flex-col sm:flex-row gap-2">
+              <Button variant="outline" className="sm:mr-auto" onClick={() => setView("list")}>
+                <ArrowLeft className="h-4 w-4" />
+                Back
+              </Button>
+              <Button variant="outline" disabled={!formValid} onClick={saveProfile}>
+                Save
+              </Button>
+              <Button disabled={!formValid} onClick={saveAndConnect}>
+                Save &amp; Connect
+              </Button>
+            </DialogFooter>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   )
