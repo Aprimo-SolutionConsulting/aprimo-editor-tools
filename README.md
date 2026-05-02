@@ -18,11 +18,42 @@ Upload assets to Aprimo with metadata in bulk.
 
 ### My Basket
 
-Renders the contents of an Aprimo basket. Triggered via Aprimo page hook — the basket ID is passed as a query parameter and the page fetches and displays basket items. Use this as a starting point for building custom contact sheets or for exporting basket contents to Excel.
+Renders the contents of an Aprimo basket. Triggered via Aprimo page hook — record IDs are stored in Supabase and a handle is forwarded to the page. Use this as a starting point for building custom contact sheets or for exporting basket contents to Excel.
+
+| Parameter | Source | Description |
+|-----------|--------|-------------|
+| `requestId` | Webhook (multi-record mode) | UUID handle used to fetch the record list from Supabase |
+
+Webhook action: `mybasket` (default multi-record mode — no `&mode=singleitem`).
 
 ### My Item
 
-Displays a single Aprimo record. Triggered via Aprimo page hook — the record ID is passed as a query parameter.
+Displays a single Aprimo record. Triggered via Aprimo page hook — the record ID is passed directly as a query parameter.
+
+| Parameter | Source | Description |
+|-----------|--------|-------------|
+| `record` | Webhook (`&mode=singleitem`) | The Aprimo record ID to display |
+
+Webhook action: `myitem` with `&mode=singleitem` appended to the webhook URL.
+
+### Video Resizer
+
+Resize and reformat a video asset for social media platforms, then save it back to Aprimo as an additional file. Triggered via Aprimo page hook — the record ID is passed directly as a query parameter.
+
+| Parameter | Source | Description |
+|-----------|--------|-------------|
+| `record` | Webhook (`&mode=singleitem`) | The Aprimo record ID whose master video file will be loaded |
+
+Webhook action: `videoresizer` with `&mode=singleitem` appended to the webhook URL.
+
+- Supports Instagram, YouTube, TikTok, Facebook, LinkedIn, and X with preset aspect ratios and resolutions
+- Adjustable crop mode (fill / fit), zoom, and rotation
+- Output formats: MP4, MOV, WebM
+- Live preview updates as settings change
+- **Create Rendition** — processes the video in the browser using FFmpeg.wasm and uploads the result to Aprimo as an additional file on the master file's latest version
+- **Create & Download** — processes the video and triggers a local download without uploading to Aprimo
+
+> FFmpeg.wasm requires `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: credentialless` response headers on the `/video-resizer` route. These are already configured in `next.config.mjs`.
 
 ### Excel Import
 
@@ -64,8 +95,9 @@ If any variable is missing the app falls back to the connection modal.
 
 ```json
 {
-  "mybasket": "https://your-deployment.vercel.app/my-basket",
-  "myitem":   "https://your-deployment.vercel.app/my-item"
+  "mybasket":     "https://your-deployment.vercel.app/my-basket",
+  "myitem":       "https://your-deployment.vercel.app/my-item",
+  "videoresizer": "https://your-deployment.vercel.app/video-resizer"
 }
 ```
 
