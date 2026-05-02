@@ -87,7 +87,8 @@ export function useVideoProcessing({
     const data = await ffmpeg.readFile(outputFile)
     const mimeType = outputFormat === "WebM" ? "video/webm" : "video/mp4"
     const blob = new Blob([data], { type: mimeType })
-    const filename = `${platform}_${selectedFormat.label.replace(/[^a-z0-9]/gi, "_")}_${selectedFormat.width}x${selectedFormat.height}.${ext}`
+    const slug = (s: string) => s.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "")
+    const filename = `${slug(platform)}_${slug(selectedFormat.label)}_${selectedFormat.width}x${selectedFormat.height}.${ext}`
 
     return { blob, filename }
   }
