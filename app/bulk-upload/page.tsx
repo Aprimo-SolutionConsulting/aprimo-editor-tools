@@ -18,7 +18,7 @@ import { Progress } from "@/components/ui/progress"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import type { FieldDef, ClassificationNode } from "@/models/aprimo"
@@ -554,6 +554,9 @@ export default function BulkUploadPage() {
               Select {pickerType === "ClassificationList" ? "classification" : "text"} field{" "}
               <span className="text-muted-foreground font-normal text-sm">({pickerScope})</span>
             </DialogTitle>
+            <DialogDescription>
+              Search and select a field definition to add as a {pickerScope} column.
+            </DialogDescription>
           </DialogHeader>
           <FieldDefinitionSearch
             fieldDefs={fieldDefs}
