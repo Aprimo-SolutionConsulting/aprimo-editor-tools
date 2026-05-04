@@ -8,6 +8,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
+import { Switch } from "@/components/ui/switch"
 import { ChevronDown, ChevronUp, Search, X } from "lucide-react"
 import type { AprimoRecord, FieldDef } from "@/models/aprimo"
 
@@ -40,11 +41,15 @@ export function FieldDefinitionsPanel({
 }: FieldDefinitionsPanelProps) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState("")
+  const [showReadOnly, setShowReadOnly] = useState(false)
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return q ? fieldDefs.filter((d) => (d.label || d.name).toLowerCase().includes(q)) : fieldDefs
-  }, [fieldDefs, search])
+    return fieldDefs.filter((d) => {
+      if (!showReadOnly && d.isReadOnly) return false
+      return !q || (d.label || d.name).toLowerCase().includes(q)
+    })
+  }, [fieldDefs, search, showReadOnly])
 
   const grouped = useMemo(() =>
     Object.entries(
@@ -96,23 +101,29 @@ export function FieldDefinitionsPanel({
       <CollapsibleContent>
         <div className="border-t px-4 pt-3 pb-2 space-y-3">
 
-          {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-            <Input
-              placeholder="Search fields…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="h-8 pl-8 pr-8 text-sm"
-            />
-            {search && (
-              <button
-                onClick={() => setSearch("")}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
+          {/* Search + read-only toggle */}
+          <div className="flex items-center gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+              <Input
+                placeholder="Search fields…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="h-8 pl-8 pr-8 text-sm"
+              />
+              {search && (
+                <button
+                  onClick={() => setSearch("")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer shrink-0">
+              <Switch checked={showReadOnly} onCheckedChange={setShowReadOnly} className="scale-75" />
+              <span className="text-xs text-muted-foreground">Read-only</span>
+            </label>
           </div>
 
           {/* Selected chips */}
