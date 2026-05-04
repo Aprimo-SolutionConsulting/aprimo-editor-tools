@@ -176,6 +176,7 @@ function BasketExampleContent() {
       <FieldDefinitionsPanel
         fieldDefs={fieldDefs}
         selectedFields={selectedFields}
+        tableFields={tableFields}
         toggleField={toggleField}
         recordIds={recordIds}
         fetchRecords={fetchRecords}
