@@ -10,6 +10,7 @@ const routeLabels: Record<string, string> = {
   "my-item": "My Item",
   "my-basket": "My Basket",
   "video-resizer": "Video Resizer",
+  "video-studio": "Video Studio",
 }
 
 export function PageHeader() {
