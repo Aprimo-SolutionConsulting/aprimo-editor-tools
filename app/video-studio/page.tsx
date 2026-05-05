@@ -335,6 +335,17 @@ function VideoStudioContent() {
     audio.onerror = () => { audio.src = "" }
   }
 
+  function snapAudioStart(raw: number, excludeId?: string): number {
+    const SNAP = 0.5
+    for (const ac of audioClips) {
+      if (ac.id === excludeId) continue
+      const end = ac.startTime + ac.duration
+      if (Math.abs(raw - end) <= SNAP) return end
+      if (Math.abs(raw - ac.startTime) <= SNAP) return ac.startTime
+    }
+    return Math.round(raw * 2) / 2
+  }
+
   function onAudioLaneDrop(e: React.DragEvent<HTMLDivElement>, scrollLeft: number) {
     e.preventDefault()
     setAudioDropTarget(false)
@@ -342,7 +353,8 @@ function VideoStudioContent() {
     const x = e.clientX - rect.left + scrollLeft
 
     if (draggingAudioClip) {
-      const newStart = Math.max(0, (x - draggingAudioClip.grabOffsetPx) / PIXELS_PER_SECOND)
+      const raw = Math.max(0, (x - draggingAudioClip.grabOffsetPx) / PIXELS_PER_SECOND)
+      const newStart = snapAudioStart(raw, draggingAudioClip.id)
       setAudioClips((prev) => prev.map((c) => c.id === draggingAudioClip.id ? { ...c, startTime: newStart } : c))
       setDraggingAudioClip(null)
       return
@@ -356,7 +368,7 @@ function VideoStudioContent() {
         setDraggingId(null)
         return
       }
-      const startTime = Math.max(0, x / PIXELS_PER_SECOND)
+      const startTime = snapAudioStart(Math.max(0, x / PIXELS_PER_SECOND))
       const id = crypto.randomUUID()
       setAudioClips((prev) => [...prev, { id, url: asset.publicLink!, name: asset.title, startTime, trimIn: 0, duration: DEFAULT_CLIP_DURATION, sourceDuration: DEFAULT_CLIP_DURATION }])
       probeAudioDuration(id, asset.publicLink)
@@ -538,7 +550,7 @@ function VideoStudioContent() {
           const ci = sortedClips[i]
           normFilters.push(`[${i}:v]trim=start=${ci.trimIn}:duration=${ci.duration},setpts=PTS-STARTPTS,fps=fps=30,settb=AVTB,${vf},setsar=1[nv${i}]`)
           if (ci.muted) {
-            normFilters.push(`aevalsrc=0:c=stereo:r=44100:d=${ci.duration}[na${i}]`)
+            normFilters.push(`aevalsrc=0:c=stereo:s=44100:d=${ci.duration}[na${i}]`)
           } else {
             normFilters.push(`[${i}:a]atrim=start=${ci.trimIn}:duration=${ci.duration},asetpts=PTS-STARTPTS,aresample=44100[na${i}]`)
           }
@@ -619,6 +631,9 @@ function VideoStudioContent() {
 
   const readyCount = assets.filter((a) => a.publicLink).length
   const sortedClips = [...videoClips].sort((a, b) => a.startTime - b.startTime)
+  const videoEndTime = sortedClips.length > 0
+    ? Math.max(...sortedClips.map((c) => c.startTime + c.duration))
+    : 0
   const activeClip = sortedClips[playIndex] ?? null
   const activeAsset = activeClip ? assets.find((a) => a.id === activeClip.assetId) : null
   const trimClip = trimClipId ? videoClips.find((c) => c.assetId === trimClipId) ?? null : null
@@ -1105,9 +1120,25 @@ function VideoStudioContent() {
                             />
                             <Music2 className="h-3 w-3 shrink-0 text-green-600 ml-1" />
                             <span className="text-xs text-green-700 dark:text-green-400 truncate">{ac.name}</span>
+                            {videoEndTime > 0 && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  const available = videoEndTime - ac.startTime
+                                  if (available <= 0) return
+                                  const newDuration = Math.min(ac.duration, available, ac.sourceDuration - ac.trimIn)
+                                  setAudioClips((prev) => prev.map((c) => c.id === ac.id ? { ...c, duration: Math.max(0.1, newDuration) } : c))
+                                }}
+                                className="shrink-0 ml-1 flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-medium transition-colors bg-green-200 hover:bg-green-300 text-green-800"
+                                title="Crop to video length"
+                              >
+                                <Scissors className="h-3 w-3" />
+                                <span>Fit</span>
+                              </button>
+                            )}
                             <button
                               onClick={(e) => { e.stopPropagation(); setAudioClips((prev) => prev.filter((c) => c.id !== ac.id)) }}
-                              className="shrink-0 opacity-60 hover:opacity-100 ml-auto"
+                              className="shrink-0 opacity-60 hover:opacity-100"
                             >
                               <X className="h-2.5 w-2.5" />
                             </button>
