@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Loader2, Clapperboard } from "lucide-react"
 import { VideoSettingsPanel } from "../video-resizer/components/video-settings-panel"
 import { PLATFORMS } from "../video-resizer/constants"
-import { SelectedAsset, VideoClip, TransitionClip, AudioClip } from "./types"
+import { SelectedAsset, VideoClip, TransitionClip, AudioClip, TextClip } from "./types"
 import { TrimEditor } from "./components/trim-editor"
 import { StudioSidebar } from "./components/studio-sidebar"
 import { VideoTimeline } from "./components/video-timeline"
@@ -24,6 +24,8 @@ function VideoStudioContent() {
   const [videoClips, setVideoClips] = useState<VideoClip[]>([])
   const [transitionClips, setTransitionClips] = useState<TransitionClip[]>([])
   const [audioClips, setAudioClips] = useState<AudioClip[]>([])
+  const [textClips, setTextClips] = useState<TextClip[]>([])
+  const [selectedTextClipId, setSelectedTextClipId] = useState<string | null>(null)
   const [trimClipId, setTrimClipId] = useState<string | null>(null)
   const [playIndex, setPlayIndex] = useState(0)
   const [platform, setPlatform] = useState("YouTube")
@@ -72,6 +74,8 @@ function VideoStudioContent() {
   const activeAsset = activeClip ? assets.find((a) => a.id === activeClip.assetId) : null
   const trimClip = trimClipId ? videoClips.find((c) => c.assetId === trimClipId) ?? null : null
   const trimAsset = trimClip ? assets.find((a) => a.id === trimClip.assetId) ?? null : null
+  const selectedTextClip = selectedTextClipId ? textClips.find((c) => c.id === selectedTextClipId) ?? null : null
+  const activeTextAsset = selectedTextClip ? assets.find((a) => a.id === selectedTextClip.assetId) ?? null : null
 
   function handleTrimChange(trimIn: number, duration: number) {
     if (!trimClipId) return
@@ -86,6 +90,7 @@ function VideoStudioContent() {
     assets,
     durations,
     transitionClips,
+    textClips,
     selectedFormat,
     cropMode,
     zoom,
@@ -113,37 +118,76 @@ function VideoStudioContent() {
         <div ref={previewContainerRef} className="flex-1 flex items-center justify-center bg-muted/30 overflow-auto">
           {activeAsset?.publicLink ? (
             <div
-              className="relative overflow-hidden bg-white"
+              className="relative overflow-hidden bg-black"
               style={{ width: previewW, height: previewH }}
             >
-              <video
-                key={activeClip!.assetId}
-                src={activeAsset.publicLink}
-                controls
-                onLoadedMetadata={(e) => {
-                  const d = e.currentTarget.duration
-                  if (activeClip && isFinite(d) && d > 0) {
-                    setDurations((prev) => ({ ...prev, [activeClip.assetId]: d }))
-                  }
-                  e.currentTarget.currentTime = activeClip?.trimIn ?? 0
-                }}
-                onTimeUpdate={(e) => {
-                  if (!activeClip) return
-                  const trimOut = activeClip.trimIn + activeClip.duration
-                  if (e.currentTarget.currentTime >= trimOut) {
-                    e.currentTarget.pause()
-                    e.currentTarget.currentTime = activeClip.trimIn
-                    setPlayIndex((i) => (i + 1) % sortedClips.length)
-                  }
-                }}
-                onEnded={() => setPlayIndex((i) => (i + 1) % sortedClips.length)}
-                className="absolute inset-0 w-full h-full"
-                style={{
-                  objectFit: cropMode === "fill" ? "cover" : "contain",
-                  transform: `scale(${zoom / 100}) rotate(${rotation}deg)`,
-                  transformOrigin: "center",
-                }}
-              />
+              {activeTextAsset && (() => {
+                const pos = activeTextAsset.textPosition ?? "middle-center"
+                const [v, h] = pos.split("-") as ["top"|"middle"|"bottom", "left"|"center"|"right"]
+                const justify = v === "top" ? "justify-start" : v === "bottom" ? "justify-end" : "justify-center"
+                const items   = h === "left" ? "items-start"  : h === "right"  ? "items-end"   : "items-center"
+                return (
+                  <div
+                    className={`absolute inset-0 z-10 flex flex-col p-5 pointer-events-none transition-opacity duration-300 ${justify} ${items}`}
+                    style={{ opacity: (activeTextAsset.textOpacity ?? 100) / 100 }}
+                  >
+                    <div style={{ fontFamily: activeTextAsset.textFont ? `'${activeTextAsset.textFont}', sans-serif` : undefined, color: activeTextAsset.textColor ?? "#ffffff", lineHeight: 1.4, textAlign: h as "left" | "center" | "right" }}>
+                      {activeTextAsset.heading && (
+                        <div style={{ fontSize: activeTextAsset.headingSize ?? 48, whiteSpace: "pre-line" }}>
+                          {activeTextAsset.heading}
+                        </div>
+                      )}
+                      {activeTextAsset.body && (
+                        <div style={{ fontSize: activeTextAsset.textSize ?? 32, whiteSpace: "pre-line" }}>
+                          {activeTextAsset.body}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })()}
+              {activeAsset.mediaType === "image" ? (
+                <img
+                  key={activeClip!.assetId}
+                  src={activeAsset.publicLink}
+                  alt={activeAsset.title}
+                  className="absolute inset-0 w-full h-full"
+                  style={{
+                    objectFit: cropMode === "fill" ? "cover" : "contain",
+                    transform: `scale(${zoom / 100}) rotate(${rotation}deg)`,
+                    transformOrigin: "center",
+                  }}
+                />
+              ) : (
+                <video
+                  key={activeClip!.assetId}
+                  src={activeAsset.publicLink}
+                  controls
+                  onLoadedMetadata={(e) => {
+                    const d = e.currentTarget.duration
+                    if (activeClip && isFinite(d) && d > 0) {
+                      setDurations((prev) => ({ ...prev, [activeClip.assetId]: d }))
+                    }
+                    e.currentTarget.currentTime = activeClip?.trimIn ?? 0
+                  }}
+                  onTimeUpdate={(e) => {
+                    if (!activeClip) return
+                    const trimOut = activeClip.trimIn + activeClip.duration
+                    if (e.currentTarget.currentTime >= trimOut) {
+                      e.currentTarget.pause()
+                      e.currentTarget.currentTime = activeClip.trimIn
+                      setPlayIndex((i) => (i + 1) % sortedClips.length)
+                    }
+                  }}
+                  onEnded={() => setPlayIndex((i) => (i + 1) % sortedClips.length)}
+                  className="absolute inset-0 w-full h-full"
+                  style={{
+                    objectFit: cropMode === "fill" ? "cover" : "contain",
+                    transform: `scale(${zoom / 100}) rotate(${rotation}deg)`,
+                    transformOrigin: "center",
+                  }}
+                />
+              )}
             </div>
           ) : (
             <div className="flex flex-col items-center gap-3 text-muted-foreground">
@@ -215,6 +259,10 @@ function VideoStudioContent() {
         setTransitionClips={setTransitionClips}
         audioClips={audioClips}
         setAudioClips={setAudioClips}
+        textClips={textClips}
+        setTextClips={setTextClips}
+        selectedTextClipId={selectedTextClipId}
+        setSelectedTextClipId={setSelectedTextClipId}
         assets={assets}
         durations={durations}
         playIndex={playIndex}

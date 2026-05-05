@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { toast } from "sonner"
 import { buildVfFilter } from "../../video-resizer/constants"
-import { VideoClip, AudioClip, TransitionClip, SelectedAsset } from "../types"
+import { VideoClip, AudioClip, TransitionClip, TextClip, SelectedAsset, TEXT_FONTS } from "../types"
 
 interface UseProduceVideoParams {
   sortedClips: VideoClip[]
@@ -11,6 +11,7 @@ interface UseProduceVideoParams {
   assets: SelectedAsset[]
   durations: Record<string, number>
   transitionClips: TransitionClip[]
+  textClips: TextClip[]
   selectedFormat: { width: number; height: number }
   cropMode: "fill" | "fit"
   zoom: number
@@ -18,12 +19,91 @@ interface UseProduceVideoParams {
   outputFormat: string
 }
 
+// ── helpers ──────────────────────────────────────────────────────────────────
+
+function escapeDrawtext(s: string): string {
+  return s
+    .replace(/\\/g, "\\\\")
+    .replace(/'/g, "\\'")
+    .replace(/:/g, "\\:")
+    .replace(/\n/g, "\\n")
+}
+
+function toFfmpegColor(color: string | undefined): string {
+  if (!color || color === "transparent") return "white"
+  return color.startsWith("#") ? `0x${color.slice(1)}` : color
+}
+
+function buildDrawtextChain(
+  textClips: TextClip[],
+  assets: SelectedAsset[],
+  fontPathMap: Map<string, string>,
+): string {
+  const filters: string[] = []
+
+  for (const tc of textClips) {
+    const asset = assets.find((a) => a.id === tc.assetId)
+    if (!asset || asset.mediaType !== "text") continue
+
+    const headingText = escapeDrawtext(asset.heading ?? "")
+    const bodyText = escapeDrawtext(asset.body ?? "")
+    if (!headingText && !bodyText) continue
+
+    const textColor = toFfmpegColor(asset.textColor)
+    const opacity = (asset.textOpacity ?? 100) / 100
+
+    const fontValue = asset.textFont ?? TEXT_FONTS[0].value
+    const fontPath = fontPathMap.get(fontValue) ?? [...fontPathMap.values()][0] ?? "/tmp/font.ttf"
+
+    const pos = asset.textPosition ?? "middle-center"
+    const [v, h] = pos.split("-") as ["top" | "middle" | "bottom", "left" | "center" | "right"]
+
+    const pad = 20
+    const headingSize = asset.headingSize ?? 48
+    const bodySize = asset.textSize ?? 32
+    const headingLineH = headingText ? Math.round(headingSize * 1.3) : 0
+    const bodyLineH = bodyText ? Math.round(bodySize * 1.3) : 0
+    const gap = headingText && bodyText ? 8 : 0
+    const totalH = headingLineH + bodyLineH + gap
+
+    const xFor = () => h === "left" ? `${pad}` : h === "right" ? `w-tw-${pad}` : `(w-tw)/2`
+    const blockTop = v === "top" ? `${pad}` : v === "bottom" ? `h-${totalH}-${pad}` : `(h-${totalH})/2`
+    const bodyY = v === "top"
+      ? `${pad + headingLineH + gap}`
+      : v === "bottom"
+        ? `h-${totalH}-${pad}+${headingLineH + gap}`
+        : `(h-${totalH})/2+${headingLineH + gap}`
+
+    const start = tc.startTime
+    const end = tc.startTime + tc.duration
+    const fade = Math.min(0.3, tc.duration / 4)
+    const enable = `between(t,${start},${end})`
+    const alpha = `${opacity}*if(lt(t-${start},${fade}),(t-${start})/${fade},if(gt(t,${end}-${fade}),(${end}-t)/${fade},1))`
+
+    if (headingText) {
+      filters.push(
+        `drawtext=fontfile=${fontPath}:text='${headingText}':fontcolor=${textColor}:fontsize=${headingSize}:x=${xFor()}:y=${blockTop}:enable='${enable}':alpha='${alpha}'`
+      )
+    }
+    if (bodyText) {
+      filters.push(
+        `drawtext=fontfile=${fontPath}:text='${bodyText}':fontcolor=${textColor}:fontsize=${bodySize}:x=${xFor()}:y=${bodyY}:enable='${enable}':alpha='${alpha}'`
+      )
+    }
+  }
+
+  return filters.join(",")
+}
+
+// ── hook ─────────────────────────────────────────────────────────────────────
+
 export function useProduceVideo({
   sortedClips,
   audioClips,
   assets,
   durations,
   transitionClips,
+  textClips,
   selectedFormat,
   cropMode,
   zoom,
@@ -46,12 +126,7 @@ export function useProduceVideo({
 
       const ffmpeg = new FFmpeg()
 
-      // expectedDuration is set just before exec so log handler can use it.
-      // We parse time= from FFmpeg stderr instead of using the progress event,
-      // because progress uses input duration as denominator — which is wrong when
-      // the output is shorter than the input (e.g. trimmed clips).
       let expectedDuration = 0
-
       ffmpeg.on("log", ({ message }) => {
         console.log("[ffmpeg]", message)
         if (expectedDuration <= 0) return
@@ -84,6 +159,28 @@ export function useProduceVideo({
         await ffmpeg.writeFile(`audio${i}`, fileData)
       }
 
+      // Fonts for drawtext — download each unique font used by text clips
+      const activeTextClips = textClips.filter((tc) => assets.find((a) => a.id === tc.assetId)?.mediaType === "text")
+      const fontPathMap = new Map<string, string>() // fontValue → /tmp/font_xxx.ttf
+      if (activeTextClips.length > 0) {
+        const uniqueFonts = [...new Set(
+          activeTextClips.map((tc) => {
+            const a = assets.find((x) => x.id === tc.assetId)
+            return a?.textFont ?? TEXT_FONTS[0].value
+          })
+        )]
+        for (const fontValue of uniqueFonts) {
+          const fontDef = TEXT_FONTS.find((f) => f.value === fontValue) ?? TEXT_FONTS[0]
+          const safeName = fontValue.replace(/\s+/g, "_")
+          const fontPath = `/tmp/font_${safeName}.ttf`
+          setProduceProgress(`Loading font ${fontDef.label}…`)
+          const fontData = await fetchFile(fontDef.ttfUrl)
+          await ffmpeg.writeFile(fontPath, fontData)
+          fontPathMap.set(fontValue, fontPath)
+        }
+      }
+      const textChain = buildDrawtextChain(activeTextClips, assets, fontPathMap)
+
       const getTransition = (i: number) => {
         const boundary = sortedClips[i].startTime + (durations[sortedClips[i].assetId] ?? sortedClips[i].duration)
         const sorted = transitionClips.slice().sort((a, b) =>
@@ -111,44 +208,87 @@ export function useProduceVideo({
 
       const vf = buildVfFilter(width, height, cropMode, zoom, rotation)
 
+      const isImageAsset = (assetId: string) =>
+        assets.find((a) => a.id === assetId)?.mediaType === "image"
+
+      const imageVideoFilter = (dur: number) =>
+        `loop=loop=-1:size=1:start=0,trim=duration=${dur},setpts=PTS-STARTPTS,${vf}`
+
+      // Helpers to handle optional text overlay in filter_complex and -vf
+      function applyTextToVf(baseVf: string): string {
+        return textChain ? `${baseVf},${textChain}` : baseVf
+      }
+      function applyTextToFc(filters: string[], videoOutLabel: string): { filters: string[]; mapLabel: string } {
+        if (!textChain) return { filters, mapLabel: videoOutLabel.replace(/[\[\]]/g, "") }
+        const finalLabel = "finalv"
+        return {
+          filters: [...filters, `${videoOutLabel}${textChain}[${finalLabel}]`],
+          mapLabel: finalLabel,
+        }
+      }
+
       if (sortedClips.length === 1) {
         const c0 = sortedClips[0]
-        const trimVf = `trim=start=${c0.trimIn}:duration=${c0.duration},setpts=PTS-STARTPTS,${vf}`
-        const videoAf = c0.muted
-          ? `atrim=start=${c0.trimIn}:duration=${c0.duration},asetpts=PTS-STARTPTS,volume=0`
-          : `atrim=start=${c0.trimIn}:duration=${c0.duration},asetpts=PTS-STARTPTS`
+        const isImg = isImageAsset(c0.assetId)
 
         expectedDuration = c0.duration
         setProduceProgress("Encoding… 0%")
 
-        if (sortedAudio.length === 0) {
-          await ffmpeg.exec([...inputs, "-vf", trimVf, "-af", videoAf, ...codecArgs, outputFile])
-        } else {
+        if (isImg) {
           const audioTrackFilters = sortedAudio.map((ac, i) =>
             `[${audioOffset + i}:a]atrim=start=${ac.trimIn}:duration=${ac.duration},asetpts=PTS-STARTPTS,adelay=${Math.round(ac.startTime * 1000)}:all=1,aresample=44100[at${i}]`
           )
-          const mixInputs = ["[va]", ...sortedAudio.map((_, i) => `[at${i}]`)].join("")
-          const filterComplex = [
-            `[0:a]${videoAf}[va]`,
-            ...audioTrackFilters,
-            `${mixInputs}amix=inputs=${1 + sortedAudio.length}:normalize=0[finala]`,
-          ].join(";")
+          const silFilter = `aevalsrc=0:c=stereo:s=44100:d=${c0.duration}[sil]`
+          const baseVFilters = sortedAudio.length === 0
+            ? [`[0:v]${imageVideoFilter(c0.duration)}[outv]`, silFilter]
+            : [`[0:v]${imageVideoFilter(c0.duration)}[outv]`, silFilter, ...audioTrackFilters, `[sil]${sortedAudio.map((_, i) => `[at${i}]`).join("")}amix=inputs=${1 + sortedAudio.length}:normalize=0[finala]`]
+          const { filters: fcFilters, mapLabel } = applyTextToFc(baseVFilters, "[outv]")
           await ffmpeg.exec([
-            ...inputs, "-vf", trimVf,
-            "-filter_complex", filterComplex,
-            "-map", "0:v", "-map", "[finala]",
+            ...inputs,
+            "-filter_complex", fcFilters.join(";"),
+            "-map", `[${mapLabel}]`,
+            "-map", sortedAudio.length === 0 ? "[sil]" : "[finala]",
             ...codecArgs, outputFile,
           ])
+        } else {
+          const trimVf = applyTextToVf(`trim=start=${c0.trimIn}:duration=${c0.duration},setpts=PTS-STARTPTS,${vf}`)
+          const videoAf = c0.muted
+            ? `atrim=start=${c0.trimIn}:duration=${c0.duration},asetpts=PTS-STARTPTS,volume=0`
+            : `atrim=start=${c0.trimIn}:duration=${c0.duration},asetpts=PTS-STARTPTS`
+          if (sortedAudio.length === 0) {
+            await ffmpeg.exec([...inputs, "-vf", trimVf, "-af", videoAf, ...codecArgs, outputFile])
+          } else {
+            const audioTrackFilters = sortedAudio.map((ac, i) =>
+              `[${audioOffset + i}:a]atrim=start=${ac.trimIn}:duration=${ac.duration},asetpts=PTS-STARTPTS,adelay=${Math.round(ac.startTime * 1000)}:all=1,aresample=44100[at${i}]`
+            )
+            const mixInputs = ["[va]", ...sortedAudio.map((_, i) => `[at${i}]`)].join("")
+            const filterComplex = [
+              `[0:a]${videoAf}[va]`,
+              ...audioTrackFilters,
+              `${mixInputs}amix=inputs=${1 + sortedAudio.length}:normalize=0[finala]`,
+            ].join(";")
+            await ffmpeg.exec([
+              ...inputs, "-vf", trimVf,
+              "-filter_complex", filterComplex,
+              "-map", "0:v", "-map", "[finala]",
+              ...codecArgs, outputFile,
+            ])
+          }
         }
       } else {
         const normFilters: string[] = []
         for (let i = 0; i < sortedClips.length; i++) {
           const ci = sortedClips[i]
-          normFilters.push(`[${i}:v]trim=start=${ci.trimIn}:duration=${ci.duration},setpts=PTS-STARTPTS,fps=fps=30,settb=AVTB,${vf},setsar=1[nv${i}]`)
-          if (ci.muted) {
+          if (isImageAsset(ci.assetId)) {
+            normFilters.push(`[${i}:v]${imageVideoFilter(ci.duration)},fps=fps=30,settb=AVTB,setsar=1[nv${i}]`)
             normFilters.push(`aevalsrc=0:c=stereo:s=44100:d=${ci.duration}[na${i}]`)
           } else {
-            normFilters.push(`[${i}:a]atrim=start=${ci.trimIn}:duration=${ci.duration},asetpts=PTS-STARTPTS,aresample=44100[na${i}]`)
+            normFilters.push(`[${i}:v]trim=start=${ci.trimIn}:duration=${ci.duration},setpts=PTS-STARTPTS,fps=fps=30,settb=AVTB,${vf},setsar=1[nv${i}]`)
+            if (ci.muted) {
+              normFilters.push(`aevalsrc=0:c=stereo:s=44100:d=${ci.duration}[na${i}]`)
+            } else {
+              normFilters.push(`[${i}:a]atrim=start=${ci.trimIn}:duration=${ci.duration},asetpts=PTS-STARTPTS,aresample=44100[na${i}]`)
+            }
           }
         }
 
@@ -173,17 +313,16 @@ export function useProduceVideo({
           aFilters.push(`${aIn}[na${i + 1}]acrossfade=d=${t.duration}${aOut}`)
         }
 
-        // Output duration = sum of all clip durations minus all transition overlaps
         expectedDuration = Math.max(0.1, cumDur + sortedClips[sortedClips.length - 1].duration - cumTrans)
         setProduceProgress("Encoding… 0%")
 
         if (sortedAudio.length === 0) {
+          const { filters: fcFilters, mapLabel } = applyTextToFc([...normFilters, ...vFilters, ...aFilters], "[outv]")
           await ffmpeg.exec([
             ...inputs,
-            "-filter_complex", [...normFilters, ...vFilters, ...aFilters].join(";"),
-            "-map", "[outv]", "-map", "[outa]",
-            ...codecArgs,
-            outputFile,
+            "-filter_complex", fcFilters.join(";"),
+            "-map", `[${mapLabel}]`, "-map", "[outa]",
+            ...codecArgs, outputFile,
           ])
         } else {
           const audioTrackFilters = sortedAudio.map((ac, i) =>
@@ -191,12 +330,12 @@ export function useProduceVideo({
           )
           const mixInputs = ["[outa]", ...sortedAudio.map((_, i) => `[at${i}]`)].join("")
           const mixFilter = `${mixInputs}amix=inputs=${1 + sortedAudio.length}:normalize=0[finala]`
+          const { filters: fcFilters, mapLabel } = applyTextToFc([...normFilters, ...vFilters, ...aFilters, ...audioTrackFilters, mixFilter], "[outv]")
           await ffmpeg.exec([
             ...inputs,
-            "-filter_complex", [...normFilters, ...vFilters, ...aFilters, ...audioTrackFilters, mixFilter].join(";"),
-            "-map", "[outv]", "-map", "[finala]",
-            ...codecArgs,
-            outputFile,
+            "-filter_complex", fcFilters.join(";"),
+            "-map", `[${mapLabel}]`, "-map", "[finala]",
+            ...codecArgs, outputFile,
           ])
         }
       }
