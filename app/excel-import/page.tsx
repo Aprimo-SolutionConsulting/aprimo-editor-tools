@@ -315,7 +315,7 @@ export default function ExcelImportPage() {
       const row = dataRows[i]
       const recordId = row[recordIdColumn].trim()
 
-      const fieldUpdates = mappableColumns
+      const fieldUpdates = (mappableColumns
         .filter((col) => fieldMappings[col])
         .flatMap((col) => {
           const fieldName = fieldMappings[col]
@@ -337,7 +337,7 @@ export default function ExcelImportPage() {
 
           if (!rawValue) return []
           return [{ id: def.id, localizedValues: [{ languageId, value: rawValue }] }]
-        })
+        }) as { id: string; localizedValues: { languageId: string; values?: string[]; value?: string }[] }[])
 
       if (!fieldUpdates.length) {
         results.push({ recordId, success: true })
