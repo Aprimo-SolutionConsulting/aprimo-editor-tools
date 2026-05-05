@@ -56,22 +56,24 @@ export function VideoSettingsPanel({
 
         <div className="space-y-2">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Resize for</p>
-          <Select value={platform} onValueChange={(v) => onPlatformChange(v)}>
-            <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {Object.keys(PLATFORMS).map((p) => (
-                <SelectItem key={p} value={p}>{p}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={String(formatIndex)} onValueChange={(v) => onFormatIndexChange(Number(v))}>
-            <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {formats.map((f, i) => (
-                <SelectItem key={i} value={String(i)}>{f.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex gap-2">
+            <Select value={platform} onValueChange={(v) => onPlatformChange(v)}>
+              <SelectTrigger className="h-9 text-sm w-auto shrink-0"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {Object.keys(PLATFORMS).map((p) => (
+                  <SelectItem key={p} value={p}>{p}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={String(formatIndex)} onValueChange={(v) => onFormatIndexChange(Number(v))}>
+              <SelectTrigger className="h-9 text-sm flex-1 min-w-0"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {formats.map((f, i) => (
+                  <SelectItem key={i} value={String(i)}>{f.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <p className="text-xs text-muted-foreground text-right">
             {selectedFormat.width}×{selectedFormat.height}
           </p>
