@@ -17,11 +17,13 @@ const ALL_FROM_ENV = !!(ENV_ENVIRONMENT && ENV_CLIENT_ID && ENV_CLIENT_SECRET)
 const ENV_VS_CONTENT_TYPE = process.env.NEXT_PUBLIC_VIDEO_STUDIO_CONTENT_TYPE ?? ""
 const ENV_VS_CLASSIFICATION_ID = process.env.NEXT_PUBLIC_VIDEO_STUDIO_CLASSIFICATION_ID ?? ""
 const ENV_VS_JSON_FIELD = process.env.NEXT_PUBLIC_VIDEO_STUDIO_JSON_FIELD ?? ""
-const SHOW_VS_SECTION = !ENV_VS_CONTENT_TYPE || !ENV_VS_CLASSIFICATION_ID || !ENV_VS_JSON_FIELD
+const ENV_ASSOCIATED_ASSETS_FIELD = process.env.NEXT_PUBLIC_ASSOCIATED_ASSETS_RECORD_LINK_FIELD ?? ""
+const SHOW_VS_SECTION = !ENV_VS_CONTENT_TYPE || !ENV_VS_CLASSIFICATION_ID || !ENV_VS_JSON_FIELD || !ENV_ASSOCIATED_ASSETS_FIELD
 
 const LS_VS_CONTENT_TYPE = "aprimo_vs_content_type"
 const LS_VS_CLASSIFICATION_ID = "aprimo_vs_classification_id"
 const LS_VS_JSON_FIELD = "aprimo_vs_json_field"
+const LS_ASSOCIATED_ASSETS_FIELD = "aprimo_associated_assets_record_link_field"
 
 interface ConnectionProfile {
   id: string
@@ -89,6 +91,7 @@ export function AprimoConfigDialog() {
   const [formVsContentType, setFormVsContentType] = useState("")
   const [formVsClassificationId, setFormVsClassificationId] = useState("")
   const [formVsJsonField, setFormVsJsonField] = useState("")
+  const [formAssociatedAssetsField, setFormAssociatedAssetsField] = useState("")
   const hasAttempted = useRef(false)
 
   function openDialog() {
@@ -144,6 +147,7 @@ export function AprimoConfigDialog() {
     setFormVsContentType(localStorage.getItem(LS_VS_CONTENT_TYPE) ?? "")
     setFormVsClassificationId(localStorage.getItem(LS_VS_CLASSIFICATION_ID) ?? "")
     setFormVsJsonField(localStorage.getItem(LS_VS_JSON_FIELD) ?? "")
+    setFormAssociatedAssetsField(localStorage.getItem(LS_ASSOCIATED_ASSETS_FIELD) ?? "")
   }
 
   function openNew() {
@@ -170,6 +174,7 @@ export function AprimoConfigDialog() {
     if (!ENV_VS_CONTENT_TYPE) localStorage.setItem(LS_VS_CONTENT_TYPE, formVsContentType.trim())
     if (!ENV_VS_CLASSIFICATION_ID) localStorage.setItem(LS_VS_CLASSIFICATION_ID, formVsClassificationId.trim())
     if (!ENV_VS_JSON_FIELD) localStorage.setItem(LS_VS_JSON_FIELD, formVsJsonField.trim())
+    if (!ENV_ASSOCIATED_ASSETS_FIELD) localStorage.setItem(LS_ASSOCIATED_ASSETS_FIELD, formAssociatedAssetsField.trim())
   }
 
   function buildUpdatedProfile(): ConnectionProfile {
@@ -361,6 +366,17 @@ export function AprimoConfigDialog() {
                         placeholder="00000000-0000-0000-0000-000000000000"
                         value={formVsClassificationId}
                         onChange={(e) => setFormVsClassificationId(e.target.value)}
+                      />
+                    </div>
+                  )}
+                  {!ENV_ASSOCIATED_ASSETS_FIELD && (
+                    <div className="space-y-1.5">
+                      <Label htmlFor="profile-associated-assets-field">Associated assets field name</Label>
+                      <Input
+                        id="profile-associated-assets-field"
+                        placeholder="AssociatedAssets"
+                        value={formAssociatedAssetsField}
+                        onChange={(e) => setFormAssociatedAssetsField(e.target.value)}
                       />
                     </div>
                   )}

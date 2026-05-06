@@ -99,16 +99,22 @@ export function useProduceVideo({
       const token = uploadResult.data!.token
 
       const jsonFieldName = getVsSetting(process.env.NEXT_PUBLIC_VIDEO_STUDIO_JSON_FIELD, "aprimo_vs_json_field")
+      const assocAssetsFieldName = getVsSetting(process.env.NEXT_PUBLIC_ASSOCIATED_ASSETS_RECORD_LINK_FIELD, "aprimo_associated_assets_record_link_field")
       let jsonFieldId: string | null = null
-      if (jsonFieldName) {
+      let assocAssetsFieldId: string | null = null
+      if (jsonFieldName || assocAssetsFieldName) {
         outer: for await (const result of client.fieldDefinitions.getPaged()) {
           if (!result.ok) break
           const items = (result.data?.items ?? []) as unknown as { id: string; name: string }[]
           for (const item of items) {
-            if (item.name === jsonFieldName) { jsonFieldId = item.id; break outer }
+            if (jsonFieldName && !jsonFieldId && item.name === jsonFieldName) jsonFieldId = item.id
+            if (assocAssetsFieldName && !assocAssetsFieldId && item.name === assocAssetsFieldName) assocAssetsFieldId = item.id
+            if ((!jsonFieldName || jsonFieldId) && (!assocAssetsFieldName || assocAssetsFieldId)) break outer
           }
         }
       }
+
+      const usedAssetIds = assets.filter((a) => a.mediaType !== "text").map((a) => a.id)
 
       const metadata = {
         output: { platform, format: selectedFormat, cropMode, zoom, rotation, outputFormat },
@@ -131,9 +137,12 @@ export function useProduceVideo({
         const updateBody: any = {
           files: { addOrUpdate: [{ id: masterFileId, versions: { addOrUpdate: [{ id: token, fileName: filename }] } }] },
         }
-        if (jsonFieldId) {
-          updateBody.fields = { addOrUpdate: [{ id: jsonFieldId, localizedValues: [{ value: JSON.stringify(metadata) }] }] }
+        const fieldUpdates: any[] = []
+        if (jsonFieldId) fieldUpdates.push({ id: jsonFieldId, localizedValues: [{ value: JSON.stringify(metadata) }] })
+        if (assocAssetsFieldId && usedAssetIds.length > 0) {
+          fieldUpdates.push({ id: assocAssetsFieldId, localizedValues: [{ links: usedAssetIds.map((id) => ({ recordId: id })) }] })
         }
+        if (fieldUpdates.length > 0) updateBody.fields = { addOrUpdate: fieldUpdates }
         const updateRes = await client.records.update(savedRecordId, updateBody as never)
         if (!updateRes.ok) throw new Error((updateRes as any).error?.message ?? "Failed to update asset")
         setSavedFileName(filename)
@@ -149,9 +158,12 @@ export function useProduceVideo({
         }
         if (contentType) recordBody.contentType = contentType
         if (classificationId) recordBody.classifications = { addOrUpdate: [{ id: classificationId }] }
-        if (jsonFieldId) {
-          recordBody.fields = { addOrUpdate: [{ id: jsonFieldId, localizedValues: [{ value: JSON.stringify(metadata) }] }] }
+        const createFieldUpdates: any[] = []
+        if (jsonFieldId) createFieldUpdates.push({ id: jsonFieldId, localizedValues: [{ value: JSON.stringify(metadata) }] })
+        if (assocAssetsFieldId && usedAssetIds.length > 0) {
+          createFieldUpdates.push({ id: assocAssetsFieldId, localizedValues: [{ links: usedAssetIds.map((id) => ({ recordId: id })) }] })
         }
+        if (createFieldUpdates.length > 0) recordBody.fields = { addOrUpdate: createFieldUpdates }
 
         const createRes = await client.records.create(recordBody as never)
         if (!createRes.ok) throw new Error(createRes.error?.message ?? "Failed to create asset")
