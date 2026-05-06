@@ -13,7 +13,7 @@ const nextConfig = {
     return [
       {
         // SharedArrayBuffer required by ffmpeg.wasm
-        source: "/video-resizer",
+        source: "/(video-resizer|video-studio)",
         headers: [
           { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
           { key: "Cross-Origin-Embedder-Policy", value: "credentialless" },
