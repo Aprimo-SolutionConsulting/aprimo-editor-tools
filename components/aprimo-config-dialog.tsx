@@ -358,17 +358,6 @@ export function AprimoConfigDialog() {
                       )}
                     </div>
                   )}
-                  {!ENV_VS_CLASSIFICATION_ID && (
-                    <div className="space-y-1.5">
-                      <Label htmlFor="profile-vs-classification-id">Classification ID</Label>
-                      <Input
-                        id="profile-vs-classification-id"
-                        placeholder="00000000-0000-0000-0000-000000000000"
-                        value={formVsClassificationId}
-                        onChange={(e) => setFormVsClassificationId(e.target.value)}
-                      />
-                    </div>
-                  )}
                   {!ENV_ASSOCIATED_ASSETS_FIELD && (
                     <div className="space-y-1.5">
                       <Label htmlFor="profile-associated-assets-field">Associated assets field name</Label>
@@ -377,6 +366,17 @@ export function AprimoConfigDialog() {
                         placeholder="AssociatedAssets"
                         value={formAssociatedAssetsField}
                         onChange={(e) => setFormAssociatedAssetsField(e.target.value)}
+                      />
+                    </div>
+                  )}
+                  {!ENV_VS_CLASSIFICATION_ID && (
+                    <div className="space-y-1.5">
+                      <Label htmlFor="profile-vs-classification-id">Classification ID</Label>
+                      <Input
+                        id="profile-vs-classification-id"
+                        placeholder="00000000-0000-0000-0000-000000000000"
+                        value={formVsClassificationId}
+                        onChange={(e) => setFormVsClassificationId(e.target.value)}
                       />
                     </div>
                   )}
