@@ -14,6 +14,15 @@ const ENV_CLIENT_ID = process.env.NEXT_PUBLIC_APRIMO_CLIENT_ID ?? ""
 const ENV_CLIENT_SECRET = process.env.NEXT_PUBLIC_APRIMO_CLIENT_SECRET ?? ""
 const ALL_FROM_ENV = !!(ENV_ENVIRONMENT && ENV_CLIENT_ID && ENV_CLIENT_SECRET)
 
+const ENV_VS_CONTENT_TYPE = process.env.NEXT_PUBLIC_VIDEO_STUDIO_CONTENT_TYPE ?? ""
+const ENV_VS_CLASSIFICATION_ID = process.env.NEXT_PUBLIC_VIDEO_STUDIO_CLASSIFICATION_ID ?? ""
+const ENV_VS_JSON_FIELD = process.env.NEXT_PUBLIC_VIDEO_STUDIO_JSON_FIELD ?? ""
+const SHOW_VS_SECTION = !ENV_VS_CONTENT_TYPE || !ENV_VS_CLASSIFICATION_ID || !ENV_VS_JSON_FIELD
+
+const LS_VS_CONTENT_TYPE = "aprimo_vs_content_type"
+const LS_VS_CLASSIFICATION_ID = "aprimo_vs_classification_id"
+const LS_VS_JSON_FIELD = "aprimo_vs_json_field"
+
 interface ConnectionProfile {
   id: string
   name: string
@@ -77,6 +86,9 @@ export function AprimoConfigDialog() {
   const [formEnvironment, setFormEnvironment] = useState("")
   const [formClientId, setFormClientId] = useState("")
   const [formClientSecret, setFormClientSecret] = useState("")
+  const [formVsContentType, setFormVsContentType] = useState("")
+  const [formVsClassificationId, setFormVsClassificationId] = useState("")
+  const [formVsJsonField, setFormVsJsonField] = useState("")
   const hasAttempted = useRef(false)
 
   function openDialog() {
@@ -128,12 +140,19 @@ export function AprimoConfigDialog() {
     startOAuth(profile.environment, profile.clientId, profile.clientSecret)
   }
 
+  function initVsFields() {
+    setFormVsContentType(localStorage.getItem(LS_VS_CONTENT_TYPE) ?? "")
+    setFormVsClassificationId(localStorage.getItem(LS_VS_CLASSIFICATION_ID) ?? "")
+    setFormVsJsonField(localStorage.getItem(LS_VS_JSON_FIELD) ?? "")
+  }
+
   function openNew() {
     setEditing(null)
     setFormName("")
     setFormEnvironment("")
     setFormClientId("")
     setFormClientSecret("")
+    initVsFields()
     setView("edit")
   }
 
@@ -143,7 +162,14 @@ export function AprimoConfigDialog() {
     setFormEnvironment(profile.environment)
     setFormClientId(profile.clientId)
     setFormClientSecret(profile.clientSecret)
+    initVsFields()
     setView("edit")
+  }
+
+  function persistVsFields() {
+    if (!ENV_VS_CONTENT_TYPE) localStorage.setItem(LS_VS_CONTENT_TYPE, formVsContentType.trim())
+    if (!ENV_VS_CLASSIFICATION_ID) localStorage.setItem(LS_VS_CLASSIFICATION_ID, formVsClassificationId.trim())
+    if (!ENV_VS_JSON_FIELD) localStorage.setItem(LS_VS_JSON_FIELD, formVsJsonField.trim())
   }
 
   function buildUpdatedProfile(): ConnectionProfile {
@@ -162,6 +188,7 @@ export function AprimoConfigDialog() {
       ? profiles.map((p) => (p.id === editing.id ? profile : p))
       : [...profiles, profile]
     persistProfiles(updated)
+    persistVsFields()
     setProfiles(updated)
     setView("list")
   }
@@ -172,6 +199,7 @@ export function AprimoConfigDialog() {
       ? profiles.map((p) => (p.id === editing.id ? profile : p))
       : [...profiles, profile]
     persistProfiles(updated)
+    persistVsFields()
     setOpen(false)
     startOAuth(profile.environment, profile.clientId, profile.clientSecret)
   }
@@ -295,6 +323,49 @@ export function AprimoConfigDialog() {
                   onChange={(e) => setFormClientSecret(e.target.value)}
                 />
               </div>
+
+              {SHOW_VS_SECTION && (
+                <div className="border-t border-border pt-4 space-y-4">
+                  <p className="text-xs font-medium text-muted-foreground">Video Studio — Save as Asset</p>
+                  {(!ENV_VS_CONTENT_TYPE || !ENV_VS_JSON_FIELD) && (
+                    <div className="grid grid-cols-2 gap-3">
+                      {!ENV_VS_CONTENT_TYPE && (
+                        <div className="space-y-1.5">
+                          <Label htmlFor="profile-vs-content-type">Content type</Label>
+                          <Input
+                            id="profile-vs-content-type"
+                            placeholder="Video"
+                            value={formVsContentType}
+                            onChange={(e) => setFormVsContentType(e.target.value)}
+                          />
+                        </div>
+                      )}
+                      {!ENV_VS_JSON_FIELD && (
+                        <div className="space-y-1.5">
+                          <Label htmlFor="profile-vs-json-field">JSON field name</Label>
+                          <Input
+                            id="profile-vs-json-field"
+                            placeholder="VideoStudioJson"
+                            value={formVsJsonField}
+                            onChange={(e) => setFormVsJsonField(e.target.value)}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {!ENV_VS_CLASSIFICATION_ID && (
+                    <div className="space-y-1.5">
+                      <Label htmlFor="profile-vs-classification-id">Classification ID</Label>
+                      <Input
+                        id="profile-vs-classification-id"
+                        placeholder="00000000-0000-0000-0000-000000000000"
+                        value={formVsClassificationId}
+                        onChange={(e) => setFormVsClassificationId(e.target.value)}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <DialogFooter className="flex-col sm:flex-row gap-2">

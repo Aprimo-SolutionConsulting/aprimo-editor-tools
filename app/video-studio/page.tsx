@@ -1,12 +1,15 @@
 "use client"
 
-import { Suspense, useState } from "react"
+import { Suspense, useEffect, useRef, useState } from "react"
+import { useSearchParams } from "next/navigation"
+import { toast } from "sonner"
+import { Expander } from "aprimo-js"
 import { Navbar } from "@/components/navbar"
 import { Footer } from "@/components/footer"
 import { useAprimo } from "@/context/aprimo-context"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Loader2, Clapperboard, Play } from "lucide-react"
+import { Loader2, Clapperboard, Play, Braces, Download, ExternalLink } from "lucide-react"
 import { VideoSettingsPanel } from "../video-resizer/components/video-settings-panel"
 import { PLATFORMS } from "../video-resizer/constants"
 import { SelectedAsset, VideoClip, TransitionClip, AudioClip, TextClip } from "./types"
@@ -18,7 +21,9 @@ import { useProduceVideo } from "./hooks/use-produce-video"
 // ── page ─────────────────────────────────────────────────────────────────────
 
 function VideoStudioContent() {
-  const { isConnected, connection } = useAprimo()
+  const { isConnected, connection, client } = useAprimo()
+  const searchParams = useSearchParams()
+  const recordParam = searchParams.get("record")
 
   // Assets
   const [assets, setAssets] = useState<SelectedAsset[]>([])
@@ -31,7 +36,6 @@ function VideoStudioContent() {
   const [transitionClips, setTransitionClips] = useState<TransitionClip[]>([])
   const [audioClips, setAudioClips] = useState<AudioClip[]>([])
   const [textClips, setTextClips] = useState<TextClip[]>([])
-  const [selectedTextClipId, setSelectedTextClipId] = useState<string | null>(null)
   const [trimClipId, setTrimClipId] = useState<string | null>(null)
 
   // Output settings
@@ -44,6 +48,106 @@ function VideoStudioContent() {
 
   // Preview
   const [previewWidth, setPreviewWidth] = useState<360 | 720 | 1280>(360)
+
+  // State inspector / loader
+  const [stateJson, setStateJson] = useState<string | null>(null)
+  const [loadDialogOpen, setLoadDialogOpen] = useState(false)
+  const [loadInput, setLoadInput] = useState("")
+  const [loadError, setLoadError] = useState<string | null>(null)
+
+  // Save to Aprimo
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false)
+  const [projectNameInput, setProjectNameInput] = useState("")
+
+  // Video Studio save settings — env vars or localStorage
+  const [vsSettingsReady, setVsSettingsReady] = useState(false)
+  useEffect(() => {
+    const ct = process.env.NEXT_PUBLIC_VIDEO_STUDIO_CONTENT_TYPE || localStorage.getItem("aprimo_vs_content_type")
+    const cid = process.env.NEXT_PUBLIC_VIDEO_STUDIO_CLASSIFICATION_ID || localStorage.getItem("aprimo_vs_classification_id")
+    const jf = process.env.NEXT_PUBLIC_VIDEO_STUDIO_JSON_FIELD || localStorage.getItem("aprimo_vs_json_field")
+    setVsSettingsReady(!!(ct && cid && jf))
+  }, [])
+
+  // Record auto-load (from ?record query param)
+  const [loadingRecord, setLoadingRecord] = useState(false)
+  const recordLoadedRef = useRef(false)
+
+  function buildStateJson() {
+    const state = {
+      output: { platform, format: selectedFormat, cropMode, zoom, rotation, outputFormat },
+      assets: assets.map((a) => ({ ...a, duration: durations[a.id] ?? null })),
+      videoClips: sortedClips,
+      transitionClips,
+      audioClips,
+      textClips: textClips.map((tc) => ({ ...tc, asset: assets.find((a) => a.id === tc.assetId) })),
+    }
+    setStateJson(JSON.stringify(state, null, 2))
+  }
+
+  function loadState(json: string) {
+    const s = JSON.parse(json)
+
+    const restoredAssets: SelectedAsset[] = (s.assets ?? []).map(({ duration: _d, ...a }: any) => ({
+      ...a, thumbnailUrl: a.thumbnailUrl ?? null, loading: false, error: null,
+    }))
+    setAssets(restoredAssets)
+
+    const restoredDurations: Record<string, number> = {}
+    ;(s.assets ?? []).forEach((a: any) => { if (a.duration != null) restoredDurations[a.id] = a.duration })
+    setDurations(restoredDurations)
+
+    setVideoClips(s.videoClips ?? [])
+    setTransitionClips(s.transitionClips ?? [])
+    setAudioClips(s.audioClips ?? [])
+    setTextClips((s.textClips ?? []).map(({ asset: _a, ...tc }: any) => tc))
+
+    if (s.output) {
+      const p = s.output.platform ?? "YouTube"
+      setPlatform(p)
+      setCropMode(s.output.cropMode ?? "fit")
+      setZoom(s.output.zoom ?? 100)
+      setRotation(s.output.rotation ?? 0)
+      setOutputFormat(s.output.outputFormat ?? "MP4")
+      const fmts = PLATFORMS[p] ?? []
+      const idx = fmts.findIndex((f) => f.label === s.output.format?.label)
+      setFormatIndex(idx >= 0 ? idx : 0)
+    }
+  }
+
+  useEffect(() => {
+    if (!recordParam || !client || !isConnected || recordLoadedRef.current) return
+    recordLoadedRef.current = true
+
+    const jsonFieldName = process.env.NEXT_PUBLIC_VIDEO_STUDIO_JSON_FIELD
+    if (!jsonFieldName) return
+
+    setLoadingRecord(true)
+
+    const expander = Expander.create()
+    ;(expander.for("record") as any).expand("fields")
+    expander.selectRecordFields(jsonFieldName)
+
+    client.search.records({ searchExpression: { expression: `id='${recordParam}'` } }, expander)
+      .then((result: any) => {
+        if (!result.ok) throw new Error(result.error?.message ?? "Failed to load record")
+        const record = result.data?.items?.[0] as any
+        if (!record) throw new Error("Record not found")
+
+        const fields: any[] = record._embedded?.fields?.items ?? []
+        const field = fields.find((f: any) => f.fieldName === jsonFieldName)
+        if (!field) throw new Error(`Field "${jsonFieldName}" not found on record`)
+
+        const value = field.localizedValues?.[0]?.value
+        if (!value) throw new Error("Field has no value")
+
+        loadState(value)
+        toast.success("Project loaded")
+      })
+      .catch((err: unknown) => {
+        toast.error(`Failed to load record: ${err instanceof Error ? err.message : String(err)}`)
+      })
+      .finally(() => setLoadingRecord(false))
+  }, [recordParam, client, isConnected])
 
   // Derived values
   const formats = PLATFORMS[platform] ?? PLATFORMS["YouTube"]
@@ -62,21 +166,94 @@ function VideoStudioContent() {
   }
 
   const {
-    produceVideo, producing, produceProgress,
+    produceVideo, producing, produceProgress, savedRecordId, savedRecordUrl,
+    downloadVideo, downloading, downloadProgress,
     generatePreview, previewing, previewProgress,
     previewUrl, clearPreview,
   } = useProduceVideo({
     sortedClips, audioClips, assets, durations, transitionClips, textClips,
-    selectedFormat, cropMode, zoom, rotation, outputFormat, previewWidth,
+    platform, selectedFormat, cropMode, zoom, rotation, outputFormat, previewWidth,
+    initialRecordId: recordParam,
   })
 
-  const isBusy         = producing || previewing
-  const activeProgress = previewProgress ?? produceProgress ?? ""
+  const isBusy         = producing || previewing || downloading || loadingRecord
+  const activeProgress = loadingRecord ? "Loading project…" : previewProgress ?? produceProgress ?? downloadProgress ?? ""
   const progressPct    = activeProgress.match(/(\d+)%/)?.[1]
   const progressValue  = progressPct != null ? parseInt(progressPct) : null
 
   return (
     <main className="flex-1 flex flex-col min-h-0">
+
+      {/* ── Load state dialog ── */}
+      <Dialog open={loadDialogOpen} onOpenChange={(open) => { setLoadDialogOpen(open); if (!open) { setLoadInput(""); setLoadError(null) } }}>
+        <DialogContent className="sm:max-w-2xl max-h-[80vh] flex flex-col" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>Load State</DialogTitle>
+          </DialogHeader>
+          <textarea
+            className="flex-1 min-h-64 text-xs font-mono bg-muted rounded p-3 outline-none resize-none focus:ring-1 focus:ring-ring"
+            placeholder="Paste state JSON here…"
+            value={loadInput}
+            onChange={(e) => { setLoadInput(e.target.value); setLoadError(null) }}
+          />
+          {loadError && <p className="text-xs text-destructive">{loadError}</p>}
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={() => setLoadDialogOpen(false)}>Cancel</Button>
+            <Button size="sm" disabled={!loadInput.trim()} onClick={() => {
+              try {
+                loadState(loadInput)
+                setLoadDialogOpen(false)
+                setLoadInput("")
+                setLoadError(null)
+              } catch (e) {
+                setLoadError(e instanceof Error ? e.message : "Invalid JSON")
+              }
+            }}>Load</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── State inspector dialog ── */}
+      <Dialog open={!!stateJson} onOpenChange={(open) => { if (!open) setStateJson(null) }}>
+        <DialogContent className="sm:max-w-2xl max-h-[80vh] flex flex-col" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>State</DialogTitle>
+          </DialogHeader>
+          <pre className="flex-1 overflow-auto text-xs bg-muted rounded p-3 font-mono whitespace-pre">{stateJson}</pre>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Save to Aprimo dialog ── */}
+      <Dialog open={saveDialogOpen} onOpenChange={(open) => { setSaveDialogOpen(open); if (!open) setProjectNameInput("") }}>
+        <DialogContent className="sm:max-w-sm" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>Save as Asset</DialogTitle>
+          </DialogHeader>
+          <input
+            type="text"
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
+            placeholder="Project name (used as filename)"
+            value={projectNameInput}
+            onChange={(e) => setProjectNameInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && projectNameInput.trim()) {
+                setSaveDialogOpen(false)
+                produceVideo(projectNameInput.trim())
+                setProjectNameInput("")
+              }
+            }}
+            autoFocus
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={() => setSaveDialogOpen(false)}>Cancel</Button>
+            <Button size="sm" disabled={!projectNameInput.trim()} onClick={() => {
+              setSaveDialogOpen(false)
+              produceVideo(projectNameInput.trim())
+              setProjectNameInput("")
+            }}>Save</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Trim dialog ── */}
       <Dialog open={!!trimClipId} onOpenChange={(open) => { if (!open) setTrimClipId(null) }}>
@@ -210,8 +387,6 @@ function VideoStudioContent() {
           setAudioClips={setAudioClips}
           textClips={textClips}
           setTextClips={setTextClips}
-          selectedTextClipId={selectedTextClipId}
-          setSelectedTextClipId={setSelectedTextClipId}
           assets={assets}
           durations={durations}
           trimClipId={trimClipId}
@@ -239,14 +414,46 @@ function VideoStudioContent() {
 
         <div className="px-4 py-2 flex items-center justify-between gap-2">
           <span className="text-xs text-muted-foreground tabular-nums">{activeProgress}</span>
-          <Button
-            size="sm"
-            onClick={produceVideo}
-            disabled={isBusy || sortedClips.length === 0}
-          >
-            {producing && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            {producing ? "Producing…" : "Produce Video"}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => { setLoadInput(""); setLoadError(null); setLoadDialogOpen(true) }}>
+              <Braces className="h-3.5 w-3.5" />
+              Load
+            </Button>
+            <Button size="sm" variant="outline" onClick={buildStateJson}>
+              <Braces className="h-3.5 w-3.5" />
+              State
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={downloadVideo}
+              disabled={isBusy || sortedClips.length === 0}
+            >
+              {downloading
+                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                : <Download className="h-3.5 w-3.5" />}
+              {downloading ? "Creating…" : "Create and Download"}
+            </Button>
+            {savedRecordUrl && !isBusy && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => window.open(savedRecordUrl, "_blank")}
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                Open in Aprimo
+              </Button>
+            )}
+            <Button
+              size="sm"
+              onClick={() => savedRecordId ? produceVideo() : setSaveDialogOpen(true)}
+              disabled={isBusy || sortedClips.length === 0 || !vsSettingsReady}
+              title={!vsSettingsReady ? "Configure Video Studio settings via the gear icon" : undefined}
+            >
+              {producing && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {producing ? "Saving…" : savedRecordId ? "Update Asset" : "Save as Asset"}
+            </Button>
+          </div>
         </div>
 
       </div>

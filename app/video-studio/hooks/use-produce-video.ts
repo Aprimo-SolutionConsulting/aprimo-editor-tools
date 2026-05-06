@@ -1,9 +1,11 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { toast } from "sonner"
+import { Expander } from "aprimo-js"
 import { buildVfFilter } from "../../video-resizer/constants"
 import { VideoClip, AudioClip, TransitionClip, TextClip, SelectedAsset, TEXT_FONTS } from "../types"
+import { useAprimo } from "@/context/aprimo-context"
 
 interface UseProduceVideoParams {
   sortedClips: VideoClip[]
@@ -12,15 +14,21 @@ interface UseProduceVideoParams {
   durations: Record<string, number>
   transitionClips: TransitionClip[]
   textClips: TextClip[]
-  selectedFormat: { width: number; height: number }
+  platform: string
+  selectedFormat: { label?: string; width: number; height: number }
   cropMode: "fill" | "fit"
   zoom: number
   rotation: number
   outputFormat: string
   previewWidth: 360 | 720 | 1280
+  initialRecordId?: string | null
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
+
+function getVsSetting(envValue: string | undefined, lsKey: string): string {
+  return envValue || (typeof window !== "undefined" ? localStorage.getItem(lsKey) ?? "" : "")
+}
 
 function escapeDrawtext(s: string): string {
   return s
@@ -97,31 +105,6 @@ function buildDrawtextChain(
   return filters.join(",")
 }
 
-// ── FFmpeg singleton ─────────────────────────────────────────────────────────
-// Loaded once per page session; subsequent runs skip the ~32 MB wasm fetch.
-
-let _ffmpegInstance: any = null
-let _ffmpegReady: Promise<void> | null = null
-
-async function acquireFFmpeg(): Promise<any> {
-  if (!_ffmpegInstance) {
-    const { FFmpeg } = await import("@ffmpeg/ffmpeg")
-    _ffmpegInstance = new FFmpeg()
-  }
-  if (!_ffmpegReady) {
-    const { toBlobURL } = await import("@ffmpeg/util")
-    const baseURL = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd"
-    _ffmpegReady = (async () => {
-      await _ffmpegInstance.load({
-        coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
-        wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
-      })
-    })()
-  }
-  await _ffmpegReady
-  return _ffmpegInstance
-}
-
 // ── hook ─────────────────────────────────────────────────────────────────────
 
 export function useProduceVideo({
@@ -131,18 +114,32 @@ export function useProduceVideo({
   durations,
   transitionClips,
   textClips,
+  platform,
   selectedFormat,
   cropMode,
   zoom,
   rotation,
   outputFormat,
   previewWidth,
+  initialRecordId,
 }: UseProduceVideoParams) {
+  const { client, connection } = useAprimo()
   const [producing, setProducing] = useState(false)
   const [produceProgress, setProduceProgress] = useState<string | null>(null)
   const [previewing, setPreviewing] = useState(false)
   const [previewProgress, setPreviewProgress] = useState<string | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [downloading, setDownloading] = useState(false)
+  const [downloadProgress, setDownloadProgress] = useState<string | null>(null)
+  const [savedRecordId, setSavedRecordId] = useState<string | null>(initialRecordId ?? null)
+  const [savedFileName, setSavedFileName] = useState<string | null>(null)
+  const [savedRecordUrl, setSavedRecordUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (initialRecordId && connection && !savedRecordUrl) {
+      setSavedRecordUrl(`https://${connection.environment}.dam.aprimo.com/dam/contentitems/${initialRecordId.replace(/-/g, "")}`)
+    }
+  }, [initialRecordId, connection])
 
   function clearPreview() {
     if (previewUrl) URL.revokeObjectURL(previewUrl)
@@ -167,24 +164,30 @@ export function useProduceVideo({
     mime: string
     setProgress: (s: string) => void
   }): Promise<Blob> {
-    const { fetchFile } = await import("@ffmpeg/util")
+    const { FFmpeg } = await import("@ffmpeg/ffmpeg")
+    const { toBlobURL, fetchFile } = await import("@ffmpeg/util")
 
     setProgress("Loading FFmpeg…")
-    const ffmpeg = await acquireFFmpeg()
+    const ffmpeg = new FFmpeg()
 
     let expectedDuration = 0
-    const logHandler = ({ message }: { message: string }) => {
+    ffmpeg.on("log", ({ message }: { message: string }) => {
       console.log("[ffmpeg]", message)
       if (expectedDuration <= 0) return
       const m = message.match(/time=(-?\d+):(\d+):(\d+\.?\d*)/)
       if (!m) return
       const secs = parseInt(m[1]) * 3600 + parseInt(m[2]) * 60 + parseFloat(m[3])
       if (secs <= 0) return
-      setProgress(`Encoding… ${Math.min(100, Math.round((secs / expectedDuration) * 100))}%`)
-    }
-    ffmpeg.on("log", logHandler)
+      setProgress(`Encoding… ${Math.min(99, Math.round((secs / expectedDuration) * 100))}%`)
+    })
 
-    const writtenFiles: string[] = []
+    const baseURL = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd"
+    await ffmpeg.load({
+      coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
+      wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
+    })
+
+    try {
 
     for (let i = 0; i < sortedClips.length; i++) {
       const clip = sortedClips[i]
@@ -193,7 +196,6 @@ export function useProduceVideo({
       setProgress(`Loading clip ${i + 1} of ${sortedClips.length}…`)
       const fileData = await fetchFile(asset.publicLink)
       await ffmpeg.writeFile(`input${i}.mp4`, fileData)
-      writtenFiles.push(`input${i}.mp4`)
     }
 
     const sortedAudio = audioClips.slice().sort((a, b) => a.startTime - b.startTime)
@@ -201,7 +203,6 @@ export function useProduceVideo({
       setProgress(`Loading audio ${i + 1} of ${sortedAudio.length}…`)
       const fileData = await fetchFile(sortedAudio[i].url)
       await ffmpeg.writeFile(`audio${i}`, fileData)
-      writtenFiles.push(`audio${i}`)
     }
 
     const activeTextClips = textClips.filter((tc) => assets.find((a) => a.id === tc.assetId)?.mediaType === "text")
@@ -215,7 +216,6 @@ export function useProduceVideo({
         const fontPath = `/tmp/font_${fontValue.replace(/\s+/g, "_")}.ttf`
         setProgress(`Loading font ${fontDef.label}…`)
         await ffmpeg.writeFile(fontPath, await fetchFile(fontDef.ttfUrl))
-        writtenFiles.push(fontPath)
         fontPathMap.set(fontValue, fontPath)
       }
     }
@@ -343,19 +343,22 @@ export function useProduceVideo({
       }
     }
 
-    const data = await ffmpeg.readFile(outputFile)
+    setProgress("Encoding… 100%")
+    const data = await ffmpeg.readFile(outputFile) as Uint8Array
+    return new Blob([data], { type: mime })
 
-    ffmpeg.off("log", logHandler)
-    for (const f of [...writtenFiles, outputFile]) {
-      try { await ffmpeg.deleteFile(f) } catch { /* ignore */ }
+    } finally {
+      // ffmpeg instance is discarded after each run; worker is GC'd
     }
-
-    return new Blob([data as Uint8Array], { type: mime })
   }
 
-  async function produceVideo() {
+  async function produceVideo(projectName?: string) {
     if (sortedClips.length === 0) {
       toast.error("Add clips to the video track first")
+      return
+    }
+    if (!client) {
+      toast.error("Not connected to Aprimo")
       return
     }
     setProducing(true)
@@ -364,8 +367,8 @@ export function useProduceVideo({
       const ext = outputFormat.toLowerCase()
       const mime = outputFormat === "WebM" ? "video/webm" : outputFormat === "MOV" ? "video/quicktime" : "video/mp4"
       const codecArgs = outputFormat === "WebM"
-        ? ["-c:v", "libvpx-vp9", "-c:a", "libopus"]
-        : ["-c:v", "libx264", "-c:a", "aac", "-pix_fmt", "yuv420p", "-preset", "fast"]
+        ? ["-c:v", "libvpx-vp9", "-c:a", "libopus", "-lag-in-frames", "0"]
+        : ["-c:v", "libx264", "-c:a", "aac", "-pix_fmt", "yuv420p", "-preset", "fast", "-bf", "0", "-x264-params", "rc-lookahead=0"]
 
       const blob = await runPipeline({
         format: selectedFormat,
@@ -375,20 +378,146 @@ export function useProduceVideo({
         setProgress: setProduceProgress,
       })
 
+      const filename = projectName ? `${projectName}.${ext}` : savedFileName ?? `video-studio-${Date.now()}.${ext}`
+      const file = new File([blob], filename, { type: mime })
+
+      setProduceProgress("Uploading…")
+      const uploadResult = await client.uploader.uploadFile(file, {
+        onProgress: (uploaded: number, total: number) => {
+          setProduceProgress(`Uploading… ${Math.round((uploaded / total) * 100)}%`)
+        },
+      })
+      if (!uploadResult.ok) throw new Error(uploadResult.error?.message ?? "Upload failed")
+      const token = uploadResult.data!.token
+
+      const jsonFieldName = getVsSetting(process.env.NEXT_PUBLIC_VIDEO_STUDIO_JSON_FIELD, "aprimo_vs_json_field")
+
+      // Resolve field name → field definition ID
+      let jsonFieldId: string | null = null
+      if (jsonFieldName) {
+        outer: for await (const result of client.fieldDefinitions.getPaged()) {
+          if (!result.ok) break
+          const items = (result.data?.items ?? []) as unknown as { id: string; name: string }[]
+          for (const item of items) {
+            if (item.name === jsonFieldName) { jsonFieldId = item.id; break outer }
+          }
+        }
+      }
+
+      const metadata = {
+        output: { platform, format: selectedFormat, cropMode, zoom, rotation, outputFormat },
+        assets: assets.map((a) => ({ ...a, duration: durations[a.id] ?? null })),
+        videoClips: sortedClips,
+        transitionClips,
+        audioClips,
+        textClips: textClips.map((tc) => ({ ...tc, asset: assets.find((a) => a.id === tc.assetId) })),
+      }
+
+      if (savedRecordId) {
+        // Fetch master file ID so we can target the correct file for the new version
+        setProduceProgress("Updating asset…")
+        const expander = Expander.create()
+        ;(expander.for("record") as any).expand("masterfile")
+        const recRes = await client.search.records(
+          { searchExpression: { expression: `id='${savedRecordId}'` } },
+          expander,
+        )
+        if (!recRes.ok) throw new Error((recRes as any).error?.message ?? "Failed to fetch record")
+        const masterFileId = (recRes.data?.items?.[0] as any)?._embedded?.masterfile?.id as string | undefined
+        if (!masterFileId) throw new Error("Could not determine master file ID")
+
+        const updateBody: any = {
+          files: {
+            addOrUpdate: [{ id: masterFileId, versions: { addOrUpdate: [{ id: token, fileName: filename }] } }],
+          },
+        }
+        if (jsonFieldId) {
+          updateBody.fields = {
+            addOrUpdate: [{ id: jsonFieldId, localizedValues: [{ value: JSON.stringify(metadata) }] }],
+          }
+        }
+        const updateRes = await client.records.update(savedRecordId, updateBody as never)
+        if (!updateRes.ok) throw new Error((updateRes as any).error?.message ?? "Failed to update asset")
+        setSavedFileName(filename)
+        toast.success("Asset updated in Aprimo", { description: filename })
+      } else {
+        // Create new record
+        setProduceProgress("Creating asset…")
+        const contentType = getVsSetting(process.env.NEXT_PUBLIC_VIDEO_STUDIO_CONTENT_TYPE, "aprimo_vs_content_type")
+        const classificationId = getVsSetting(process.env.NEXT_PUBLIC_VIDEO_STUDIO_CLASSIFICATION_ID, "aprimo_vs_classification_id")
+
+        const recordBody: any = {
+          title: filename,
+          files: {
+            master: token,
+            addOrUpdate: [{ versions: { addOrUpdate: [{ id: token, fileName: filename }] } }],
+          },
+        }
+        if (contentType) recordBody.contentType = contentType
+        if (classificationId) recordBody.classifications = { addOrUpdate: [{ id: classificationId }] }
+        if (jsonFieldId) {
+          recordBody.fields = {
+            addOrUpdate: [{ id: jsonFieldId, localizedValues: [{ value: JSON.stringify(metadata) }] }],
+          }
+        }
+
+        const createRes = await client.records.create(recordBody as never)
+        if (!createRes.ok) throw new Error(createRes.error?.message ?? "Failed to create asset")
+
+        const recordId = (createRes.data as any)?.id
+        if (recordId) {
+          setSavedRecordId(recordId)
+          setSavedFileName(filename)
+          if (connection) {
+            setSavedRecordUrl(`https://${connection.environment}.dam.aprimo.com/dam/contentitems/${recordId.replace(/-/g, "")}`)
+          }
+        }
+        toast.success("Asset saved to Aprimo", { description: filename })
+      }
+    } catch (err) {
+      toast.error(`Save failed: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setProducing(false)
+      setProduceProgress(null)
+    }
+  }
+
+  async function downloadVideo() {
+    if (sortedClips.length === 0) {
+      toast.error("Add clips to the video track first")
+      return
+    }
+    setDownloading(true)
+    setDownloadProgress("")
+    try {
+      const ext = outputFormat.toLowerCase()
+      const mime = outputFormat === "WebM" ? "video/webm" : outputFormat === "MOV" ? "video/quicktime" : "video/mp4"
+      const codecArgs = outputFormat === "WebM"
+        ? ["-c:v", "libvpx-vp9", "-c:a", "libopus", "-lag-in-frames", "0"]
+        : ["-c:v", "libx264", "-c:a", "aac", "-pix_fmt", "yuv420p", "-preset", "fast", "-bf", "0", "-x264-params", "rc-lookahead=0"]
+
+      const blob = await runPipeline({
+        format: selectedFormat,
+        codecArgs,
+        outputFile: `output.${ext}`,
+        mime,
+        setProgress: setDownloadProgress,
+      })
+
+      const filename = `video-studio-${Date.now()}.${ext}`
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = url
-      a.download = `produced-video.${ext}`
+      a.download = filename
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
-      toast.success("Video produced and downloaded!")
     } catch (err) {
-      toast.error(`Production failed: ${err instanceof Error ? err.message : String(err)}`)
+      toast.error(`Download failed: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
-      setProducing(false)
-      setProduceProgress(null)
+      setDownloading(false)
+      setDownloadProgress(null)
     }
   }
 
@@ -416,8 +545,8 @@ export function useProduceVideo({
         codecArgs: isSmall
           ? ["-c:v", "libx264", "-c:a", "aac", "-pix_fmt", "yuv420p", "-preset", "ultrafast", "-tune", "zerolatency", "-crf", "40", "-b:a", "64k", "-ar", "22050"]
           : isMedium
-            ? ["-c:v", "libx264", "-c:a", "aac", "-pix_fmt", "yuv420p", "-preset", "fast", "-crf", "28"]
-            : ["-c:v", "libx264", "-c:a", "aac", "-pix_fmt", "yuv420p", "-preset", "fast", "-crf", "23"],
+            ? ["-c:v", "libx264", "-c:a", "aac", "-pix_fmt", "yuv420p", "-preset", "fast", "-crf", "28", "-bf", "0", "-x264-params", "rc-lookahead=0"]
+            : ["-c:v", "libx264", "-c:a", "aac", "-pix_fmt", "yuv420p", "-preset", "fast", "-crf", "23", "-bf", "0", "-x264-params", "rc-lookahead=0"],
         outputFile: "preview.mp4",
         mime: "video/mp4",
         setProgress: setPreviewProgress,
@@ -433,5 +562,5 @@ export function useProduceVideo({
     }
   }
 
-  return { produceVideo, producing, produceProgress, generatePreview, previewing, previewProgress, previewUrl, clearPreview }
+  return { produceVideo, producing, produceProgress, savedRecordId, savedRecordUrl, downloadVideo, downloading, downloadProgress, generatePreview, previewing, previewProgress, previewUrl, clearPreview }
 }

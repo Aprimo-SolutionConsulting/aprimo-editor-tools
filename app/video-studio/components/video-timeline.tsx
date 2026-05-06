@@ -33,8 +33,6 @@ interface VideoTimelineProps {
   setAudioClips: React.Dispatch<React.SetStateAction<AudioClip[]>>
   textClips: TextClip[]
   setTextClips: React.Dispatch<React.SetStateAction<TextClip[]>>
-  selectedTextClipId: string | null
-  setSelectedTextClipId: (id: string | null) => void
   assets: SelectedAsset[]
   durations: Record<string, number>
   trimClipId: string | null
@@ -55,8 +53,6 @@ export function VideoTimeline({
   setAudioClips,
   textClips,
   setTextClips,
-  selectedTextClipId,
-  setSelectedTextClipId,
   assets,
   durations,
   trimClipId,
@@ -418,15 +414,13 @@ export function VideoTimeline({
                 {label === "Text" && textClips.map((tc) => {
                   const asset = assets.find((a) => a.id === tc.assetId)
                   const isMoving = draggingTextClip?.id === tc.id
-                  const isSelected = selectedTextClipId === tc.id
                   return (
                     <div
                       key={tc.id}
                       draggable
                       onDragStart={(e) => { e.stopPropagation(); setDraggingTextClip({ id: tc.id, grabOffsetPx: e.clientX - e.currentTarget.getBoundingClientRect().left }) }}
                       onDragEnd={() => setDraggingTextClip(null)}
-                      onClick={() => setSelectedTextClipId(isSelected ? null : tc.id)}
-                      className={`absolute top-1.5 bottom-1.5 rounded flex items-center gap-1 px-2 overflow-hidden cursor-grab active:cursor-grabbing transition-opacity ${isMoving ? "opacity-40" : ""} ${isSelected ? "border-2 border-orange-500 bg-orange-500/40" : "border border-orange-500/40 bg-orange-500/20"}`}
+                      className={`absolute top-1.5 bottom-1.5 rounded flex items-center gap-1 px-2 overflow-hidden cursor-grab active:cursor-grabbing transition-opacity border border-orange-500/40 bg-orange-500/20 ${isMoving ? "opacity-40" : ""}`}
                       style={{ left: tc.startTime * pps, width: tc.duration * pps }}
                     >
                       <div className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-orange-500/50 rounded-l z-10"

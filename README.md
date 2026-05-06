@@ -57,18 +57,54 @@ Webhook action: `videoresizer` with `&mode=singleitem` appended to the webhook U
 
 ### Video Studio
 
-A browser-based non-linear video editor. Select multiple Aprimo assets, arrange them on a timeline, add transitions, audio, and text overlays, then render the final video using FFmpeg.wasm.
+A browser-based non-linear video editor. Select multiple Aprimo assets, arrange them on a timeline, add transitions, audio, and text overlays, then render the final video using FFmpeg.wasm — entirely in the browser with no server-side transcoding.
 
-- Select multiple video, image, and audio assets directly from Aprimo using the content selector
-- Drag assets onto a four-track timeline: Video, Transitions, Audio, and Text
-- Trim video clips and set image hold durations
-- Add xfade transitions between clips (fade, wipe, slide, dissolve, and more)
-- Overlay audio tracks with independent trim and crop-to-video controls
-- Create text overlay assets with configurable font, size, color, opacity, and position
-- Generate a preview at 360p, 720p, or 1080p before final render
-- Produce the final video and upload it back to Aprimo as a new rendition
-- Output formats: MP4, MOV, WebM
-- Output size presets for General use, Instagram, YouTube, TikTok, Facebook, LinkedIn, and X
+**Asset types**
+
+| Type | Notes |
+|------|-------|
+| Video | MP4, MOV, WebM, AVI, MKV — trimmed and composited |
+| Image | JPEG, PNG, WebP, etc. — held as a still for the clip duration |
+| Audio | MP3, AAC, WAV, OGG, FLAC — placed on a separate audio track with independent trim |
+| Text | Heading + body text burned into the video via `drawtext`; configurable font, size, color, opacity, and 9-point position grid |
+
+**Timeline**
+
+- Four tracks: **Video**, **Transitions**, **Audio**, and **Text**
+- Drag assets from the sidebar onto any track
+- Reorder and move video clips; set start times for audio and text clips
+- Trim video clips with a frame-accurate trim editor (set in/out points)
+- Mute individual video clips
+
+**Transitions**
+
+Drag a transition chip from the sidebar between two clips on the video track. Uses FFmpeg's `xfade` filter — supported types include fade, dissolve, wipe (left/right/up/down), slide, circle, pixelize, zoom, and more.
+
+**Output settings**
+
+Choose a platform preset (YouTube, Instagram, TikTok, Facebook, LinkedIn, X, or custom), aspect ratio, crop mode (fill / fit), zoom, and rotation. Output formats: MP4 (H.264) and WebM (VP9).
+
+**Actions**
+
+| Button | Description |
+|--------|-------------|
+| Generate Preview | Renders a low-quality preview (360p / 720p / 1080p) for quick review |
+| Create and Download | Renders the full-quality video and saves it to your machine |
+| Save as Asset | Prompts for a project name, renders, uploads, and creates a new Aprimo record. On success, an **Open in Aprimo** button appears to jump to the new record. |
+| State | Inspect the current project as JSON |
+| Load | Restore a previously saved project from JSON |
+
+**Save as Asset — environment variables**
+
+The "Save as Asset" action requires three additional env vars (see `.env.local.example`):
+
+```
+NEXT_PUBLIC_VIDEO_STUDIO_CONTENT_TYPE=       # content type name or ID for the new record
+NEXT_PUBLIC_VIDEO_STUDIO_CLASSIFICATION_ID=  # classification ID (Aprimo records require at least one)
+NEXT_PUBLIC_VIDEO_STUDIO_JSON_FIELD=         # field name used to store the project state JSON
+```
+
+The full project state JSON (clips, assets, output settings) is written to the configured field so the project can be reloaded later using the **Load** button.
 
 > FFmpeg.wasm requires `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: credentialless` response headers on the `/video-studio` route. These are already configured in `next.config.mjs`.
 
@@ -143,6 +179,11 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 NEXT_PUBLIC_APRIMO_ENVIRONMENT=yourcompany
 NEXT_PUBLIC_APRIMO_CLIENT_ID=your-client-id
 NEXT_PUBLIC_APRIMO_CLIENT_SECRET=your-client-secret
+
+# Video Studio — Save as Asset (optional — only required if using that feature)
+NEXT_PUBLIC_VIDEO_STUDIO_CONTENT_TYPE=       # content type name or ID for new records
+NEXT_PUBLIC_VIDEO_STUDIO_CLASSIFICATION_ID=  # classification ID (records require at least one)
+NEXT_PUBLIC_VIDEO_STUDIO_JSON_FIELD=         # field name used to store project state JSON
 ```
 
 ### 3. Install and run
