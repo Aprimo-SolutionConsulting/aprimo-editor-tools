@@ -17,6 +17,7 @@ interface UseProduceVideoParams {
   zoom: number
   rotation: number
   outputFormat: string
+  previewWidth: 360 | 720 | 1280
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -109,6 +110,7 @@ export function useProduceVideo({
   zoom,
   rotation,
   outputFormat,
+  previewWidth,
 }: UseProduceVideoParams) {
   const [producing, setProducing] = useState(false)
   const [produceProgress, setProduceProgress] = useState<string | null>(null)
@@ -125,6 +127,7 @@ export function useProduceVideo({
   async function runPipeline({
     format,
     vfOverride,
+    normFps,
     codecArgs,
     outputFile,
     mime,
@@ -132,6 +135,7 @@ export function useProduceVideo({
   }: {
     format: { width: number; height: number }
     vfOverride?: string
+    normFps?: number
     codecArgs: string[]
     outputFile: string
     mime: string
@@ -244,7 +248,8 @@ export function useProduceVideo({
         const { filters: fcFilters, mapLabel } = applyTextToFc(baseVFilters, "[outv]")
         await ffmpeg.exec([...inputs, "-filter_complex", fcFilters.join(";"), "-map", `[${mapLabel}]`, "-map", sortedAudio.length === 0 ? "[sil]" : "[finala]", ...codecArgs, outputFile])
       } else {
-        const trimVf = applyTextToVf(`trim=start=${c0.trimIn}:duration=${c0.duration},setpts=PTS-STARTPTS,${vf}`)
+        const fpsFilter = normFps ? `,fps=${normFps}` : ""
+        const trimVf = applyTextToVf(`trim=start=${c0.trimIn}:duration=${c0.duration},setpts=PTS-STARTPTS,${vf}${fpsFilter}`)
         const videoAf = c0.muted
           ? `atrim=start=${c0.trimIn}:duration=${c0.duration},asetpts=PTS-STARTPTS,volume=0`
           : `atrim=start=${c0.trimIn}:duration=${c0.duration},asetpts=PTS-STARTPTS`
@@ -260,14 +265,15 @@ export function useProduceVideo({
         }
       }
     } else {
+      const fps = normFps ?? 30
       const normFilters: string[] = []
       for (let i = 0; i < sortedClips.length; i++) {
         const ci = sortedClips[i]
         if (isImageAsset(ci.assetId)) {
-          normFilters.push(`[${i}:v]${imageVideoFilter(ci.duration)},fps=fps=30,settb=AVTB,setsar=1[nv${i}]`)
+          normFilters.push(`[${i}:v]${imageVideoFilter(ci.duration)},fps=fps=${fps},settb=AVTB,setsar=1[nv${i}]`)
           normFilters.push(`aevalsrc=0:c=stereo:s=44100:d=${ci.duration}[na${i}]`)
         } else {
-          normFilters.push(`[${i}:v]trim=start=${ci.trimIn}:duration=${ci.duration},setpts=PTS-STARTPTS,fps=fps=30,settb=AVTB,${vf},setsar=1[nv${i}]`)
+          normFilters.push(`[${i}:v]trim=start=${ci.trimIn}:duration=${ci.duration},setpts=PTS-STARTPTS,fps=fps=${fps},settb=AVTB,${vf},setsar=1[nv${i}]`)
           if (ci.muted) {
             normFilters.push(`aevalsrc=0:c=stereo:s=44100:d=${ci.duration}[na${i}]`)
           } else {
@@ -362,13 +368,24 @@ export function useProduceVideo({
     setPreviewing(true)
     setPreviewProgress("Loading FFmpeg…")
     try {
-      // Scale to 360px wide — ~3× fewer pixels than 640px, major encoding speedup
-      const pw = Math.min(360, Math.floor(selectedFormat.width / 2) * 2)
+      const maxW = previewWidth === 1280 ? 1920 : previewWidth === 720 ? 1280 : 640
+      const pw = Math.min(maxW, Math.floor(selectedFormat.width / 2) * 2)
+      const ph = Math.round((pw * selectedFormat.height) / selectedFormat.width / 2) * 2
+
+      const previewVf = buildVfFilter(pw, ph, cropMode, zoom, rotation)
+
+      const isSmall = previewWidth === 360
+      const isMedium = previewWidth === 720
 
       const blob = await runPipeline({
-        format: { width: pw, height: pw }, // height unused when vfOverride is set
-        vfOverride: `scale=${pw}:-2,fps=15`,  // simple scale + 15fps, no pad/crop needed for preview
-        codecArgs: ["-c:v", "libx264", "-c:a", "aac", "-pix_fmt", "yuv420p", "-preset", "ultrafast", "-tune", "zerolatency", "-crf", "40", "-b:a", "64k", "-ar", "22050"],
+        format: { width: pw, height: ph },
+        vfOverride: previewVf,
+        normFps: isSmall ? 10 : undefined,
+        codecArgs: isSmall
+          ? ["-c:v", "libx264", "-c:a", "aac", "-pix_fmt", "yuv420p", "-preset", "ultrafast", "-tune", "zerolatency", "-crf", "40", "-b:a", "64k", "-ar", "22050"]
+          : isMedium
+            ? ["-c:v", "libx264", "-c:a", "aac", "-pix_fmt", "yuv420p", "-preset", "fast", "-crf", "28"]
+            : ["-c:v", "libx264", "-c:a", "aac", "-pix_fmt", "yuv420p", "-preset", "fast", "-crf", "23"],
         outputFile: "preview.mp4",
         mime: "video/mp4",
         setProgress: setPreviewProgress,

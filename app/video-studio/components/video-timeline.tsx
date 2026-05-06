@@ -37,8 +37,6 @@ interface VideoTimelineProps {
   setSelectedTextClipId: (id: string | null) => void
   assets: SelectedAsset[]
   durations: Record<string, number>
-  playIndex: number
-  setPlayIndex: React.Dispatch<React.SetStateAction<number>>
   trimClipId: string | null
   setTrimClipId: (id: string | null) => void
   draggingId: string | null
@@ -61,8 +59,6 @@ export function VideoTimeline({
   setSelectedTextClipId,
   assets,
   durations,
-  playIndex,
-  setPlayIndex,
   trimClipId,
   setTrimClipId,
   draggingId,
@@ -454,11 +450,10 @@ export function VideoTimeline({
                   </div>
                 ))}
 
-                {label === "Video" && sortedClips.map((clip, idx) => {
+                {label === "Video" && sortedClips.map((clip) => {
                   const asset = assets.find((a) => a.id === clip.assetId)
                   const isImg = asset?.mediaType === "image"
                   const isMoving = draggingClip?.assetId === clip.assetId
-                  const isActive = idx === playIndex
                   const isTrimming = trimClipId === clip.assetId
                   return (
                     <div
@@ -466,14 +461,13 @@ export function VideoTimeline({
                       draggable
                       onDragStart={(e) => { e.stopPropagation(); setDraggingClip({ assetId: clip.assetId, grabOffsetPx: e.clientX - e.currentTarget.getBoundingClientRect().left }) }}
                       onDragEnd={() => setDraggingClip(null)}
-                      onClick={() => setPlayIndex(idx)}
-                      className={`absolute top-1.5 bottom-1.5 rounded flex items-center gap-1 px-2 overflow-hidden cursor-grab active:cursor-grabbing transition-opacity ${isMoving ? "opacity-40" : ""} ${isTrimming ? "bg-amber-500/40 border-2 border-amber-500" : isActive ? "bg-blue-500/40 border-2 border-blue-500" : "bg-blue-500/20 border border-blue-500/40"}`}
+                      className={`absolute top-1.5 bottom-1.5 rounded flex items-center gap-1 px-2 overflow-hidden cursor-grab active:cursor-grabbing transition-opacity ${isMoving ? "opacity-40" : ""} ${isTrimming ? "bg-amber-500/40 border-2 border-amber-500" : "bg-blue-500/20 border border-blue-500/40"}`}
                       style={{ left: clip.startTime * pps, width: safeDur(clip) * pps }}
                     >
                       {isImg ? <ImageIcon className="h-3 w-3 shrink-0 text-blue-500" /> : <Film className="h-3 w-3 shrink-0 text-blue-500" />}
                       <span className="text-xs text-blue-600 dark:text-blue-400 truncate">{asset?.title ?? clip.assetId}</span>
                       {!isImg && (
-                        <button onClick={(e) => { e.stopPropagation(); setTrimClipId(isTrimming ? null : clip.assetId); setPlayIndex(idx) }}
+                        <button onClick={(e) => { e.stopPropagation(); setTrimClipId(isTrimming ? null : clip.assetId) }}
                           className={`shrink-0 ml-1 flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-medium transition-colors ${isTrimming ? "bg-amber-500 text-white" : "bg-blue-200 hover:bg-blue-300 text-blue-800"}`} title="Edit trim">
                           <Scissors className="h-3 w-3" /><span>Trim</span>
                         </button>
