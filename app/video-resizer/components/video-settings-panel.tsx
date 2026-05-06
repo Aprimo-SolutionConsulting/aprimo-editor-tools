@@ -55,7 +55,7 @@ export function VideoSettingsPanel({
       <CardContent className="flex-1 overflow-y-auto p-4 space-y-4">
 
         <div className="space-y-2">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Resize for</p>
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Output size</p>
           <div className="flex gap-2">
             <Select value={platform} onValueChange={(v) => onPlatformChange(v)}>
               <SelectTrigger className="h-9 text-sm w-auto shrink-0"><SelectValue /></SelectTrigger>

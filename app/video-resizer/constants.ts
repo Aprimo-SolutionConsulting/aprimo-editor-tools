@@ -1,4 +1,11 @@
 export const PLATFORMS: Record<string, { label: string; width: number; height: number }[]> = {
+  General: [
+    { label: "4K UHD — 16:9",    width: 3840, height: 2160 },
+    { label: "1080p — 16:9",     width: 1920, height: 1080 },
+    { label: "720p — 16:9",      width: 1280, height: 720  },
+    { label: "Square — 1:1",     width: 1080, height: 1080 },
+    { label: "Portrait — 9:16",  width: 1080, height: 1920 },
+  ],
   Instagram: [
     { label: "Feed Landscape — 16:9", width: 1080, height: 608 },
     { label: "Feed Square — 1:1", width: 1080, height: 1080 },
