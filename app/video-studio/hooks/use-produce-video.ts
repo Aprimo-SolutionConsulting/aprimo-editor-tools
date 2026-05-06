@@ -112,6 +112,208 @@ export function useProduceVideo({
 }: UseProduceVideoParams) {
   const [producing, setProducing] = useState(false)
   const [produceProgress, setProduceProgress] = useState<string | null>(null)
+  const [previewing, setPreviewing] = useState(false)
+  const [previewProgress, setPreviewProgress] = useState<string | null>(null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+
+  function clearPreview() {
+    if (previewUrl) URL.revokeObjectURL(previewUrl)
+    setPreviewUrl(null)
+  }
+
+  // Shared FFmpeg pipeline — loads assets, encodes, returns a Blob
+  async function runPipeline({
+    format,
+    vfOverride,
+    codecArgs,
+    outputFile,
+    mime,
+    setProgress,
+  }: {
+    format: { width: number; height: number }
+    vfOverride?: string
+    codecArgs: string[]
+    outputFile: string
+    mime: string
+    setProgress: (s: string) => void
+  }): Promise<Blob> {
+    const { FFmpeg } = await import("@ffmpeg/ffmpeg")
+    const { toBlobURL, fetchFile } = await import("@ffmpeg/util")
+
+    const ffmpeg = new FFmpeg()
+
+    let expectedDuration = 0
+    ffmpeg.on("log", ({ message }) => {
+      console.log("[ffmpeg]", message)
+      if (expectedDuration <= 0) return
+      const m = message.match(/time=(-?\d+):(\d+):(\d+\.?\d*)/)
+      if (!m) return
+      const secs = parseInt(m[1]) * 3600 + parseInt(m[2]) * 60 + parseFloat(m[3])
+      if (secs <= 0) return
+      setProgress(`Encoding… ${Math.min(100, Math.round((secs / expectedDuration) * 100))}%`)
+    })
+
+    const baseURL = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd"
+    await ffmpeg.load({
+      coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
+      wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
+    })
+
+    for (let i = 0; i < sortedClips.length; i++) {
+      const clip = sortedClips[i]
+      const asset = assets.find((a) => a.id === clip.assetId)
+      if (!asset?.publicLink) throw new Error(`Missing download link for clip ${i + 1}`)
+      setProgress(`Loading clip ${i + 1} of ${sortedClips.length}…`)
+      const fileData = await fetchFile(asset.publicLink)
+      await ffmpeg.writeFile(`input${i}.mp4`, fileData)
+    }
+
+    const sortedAudio = audioClips.slice().sort((a, b) => a.startTime - b.startTime)
+    for (let i = 0; i < sortedAudio.length; i++) {
+      setProgress(`Loading audio ${i + 1} of ${sortedAudio.length}…`)
+      const fileData = await fetchFile(sortedAudio[i].url)
+      await ffmpeg.writeFile(`audio${i}`, fileData)
+    }
+
+    const activeTextClips = textClips.filter((tc) => assets.find((a) => a.id === tc.assetId)?.mediaType === "text")
+    const fontPathMap = new Map<string, string>()
+    if (activeTextClips.length > 0) {
+      const uniqueFonts = [...new Set(
+        activeTextClips.map((tc) => assets.find((x) => x.id === tc.assetId)?.textFont ?? TEXT_FONTS[0].value)
+      )]
+      for (const fontValue of uniqueFonts) {
+        const fontDef = TEXT_FONTS.find((f) => f.value === fontValue) ?? TEXT_FONTS[0]
+        const fontPath = `/tmp/font_${fontValue.replace(/\s+/g, "_")}.ttf`
+        setProgress(`Loading font ${fontDef.label}…`)
+        await ffmpeg.writeFile(fontPath, await fetchFile(fontDef.ttfUrl))
+        fontPathMap.set(fontValue, fontPath)
+      }
+    }
+    const textChain = buildDrawtextChain(activeTextClips, assets, fontPathMap)
+
+    const getTransition = (i: number) => {
+      const boundary = sortedClips[i].startTime + (durations[sortedClips[i].assetId] ?? sortedClips[i].duration)
+      const sorted = transitionClips.slice().sort((a, b) =>
+        Math.abs(a.startTime - boundary) - Math.abs(b.startTime - boundary)
+      )
+      const tc = sorted[0]
+      return tc && Math.abs(tc.startTime - boundary) < 10
+        ? { type: tc.type, duration: tc.duration }
+        : { type: "fade", duration: 1 }
+    }
+
+    const inputs = [
+      ...sortedClips.flatMap((_, i) => ["-i", `input${i}.mp4`]),
+      ...sortedAudio.flatMap((_, i) => ["-i", `audio${i}`]),
+    ]
+    const audioOffset = sortedClips.length
+    const { width, height } = format
+    const vf = vfOverride ?? buildVfFilter(width, height, cropMode, zoom, rotation)
+
+    const isImageAsset = (assetId: string) =>
+      assets.find((a) => a.id === assetId)?.mediaType === "image"
+    const imageVideoFilter = (dur: number) =>
+      `loop=loop=-1:size=1:start=0,trim=duration=${dur},setpts=PTS-STARTPTS,${vf}`
+
+    function applyTextToVf(baseVf: string): string {
+      return textChain ? `${baseVf},${textChain}` : baseVf
+    }
+    function applyTextToFc(filters: string[], videoOutLabel: string): { filters: string[]; mapLabel: string } {
+      if (!textChain) return { filters, mapLabel: videoOutLabel.replace(/[\[\]]/g, "") }
+      const finalLabel = "finalv"
+      return {
+        filters: [...filters, `${videoOutLabel}${textChain}[${finalLabel}]`],
+        mapLabel: finalLabel,
+      }
+    }
+
+    if (sortedClips.length === 1) {
+      const c0 = sortedClips[0]
+      const isImg = isImageAsset(c0.assetId)
+      expectedDuration = c0.duration
+      setProgress("Encoding… 0%")
+
+      if (isImg) {
+        const audioTrackFilters = sortedAudio.map((ac, i) =>
+          `[${audioOffset + i}:a]atrim=start=${ac.trimIn}:duration=${ac.duration},asetpts=PTS-STARTPTS,adelay=${Math.round(ac.startTime * 1000)}:all=1,aresample=44100[at${i}]`
+        )
+        const silFilter = `aevalsrc=0:c=stereo:s=44100:d=${c0.duration}[sil]`
+        const baseVFilters = sortedAudio.length === 0
+          ? [`[0:v]${imageVideoFilter(c0.duration)}[outv]`, silFilter]
+          : [`[0:v]${imageVideoFilter(c0.duration)}[outv]`, silFilter, ...audioTrackFilters, `[sil]${sortedAudio.map((_, i) => `[at${i}]`).join("")}amix=inputs=${1 + sortedAudio.length}:normalize=0[finala]`]
+        const { filters: fcFilters, mapLabel } = applyTextToFc(baseVFilters, "[outv]")
+        await ffmpeg.exec([...inputs, "-filter_complex", fcFilters.join(";"), "-map", `[${mapLabel}]`, "-map", sortedAudio.length === 0 ? "[sil]" : "[finala]", ...codecArgs, outputFile])
+      } else {
+        const trimVf = applyTextToVf(`trim=start=${c0.trimIn}:duration=${c0.duration},setpts=PTS-STARTPTS,${vf}`)
+        const videoAf = c0.muted
+          ? `atrim=start=${c0.trimIn}:duration=${c0.duration},asetpts=PTS-STARTPTS,volume=0`
+          : `atrim=start=${c0.trimIn}:duration=${c0.duration},asetpts=PTS-STARTPTS`
+        if (sortedAudio.length === 0) {
+          await ffmpeg.exec([...inputs, "-vf", trimVf, "-af", videoAf, ...codecArgs, outputFile])
+        } else {
+          const audioTrackFilters = sortedAudio.map((ac, i) =>
+            `[${audioOffset + i}:a]atrim=start=${ac.trimIn}:duration=${ac.duration},asetpts=PTS-STARTPTS,adelay=${Math.round(ac.startTime * 1000)}:all=1,aresample=44100[at${i}]`
+          )
+          const mixInputs = ["[va]", ...sortedAudio.map((_, i) => `[at${i}]`)].join("")
+          const filterComplex = [`[0:a]${videoAf}[va]`, ...audioTrackFilters, `${mixInputs}amix=inputs=${1 + sortedAudio.length}:normalize=0[finala]`].join(";")
+          await ffmpeg.exec([...inputs, "-vf", trimVf, "-filter_complex", filterComplex, "-map", "0:v", "-map", "[finala]", ...codecArgs, outputFile])
+        }
+      }
+    } else {
+      const normFilters: string[] = []
+      for (let i = 0; i < sortedClips.length; i++) {
+        const ci = sortedClips[i]
+        if (isImageAsset(ci.assetId)) {
+          normFilters.push(`[${i}:v]${imageVideoFilter(ci.duration)},fps=fps=30,settb=AVTB,setsar=1[nv${i}]`)
+          normFilters.push(`aevalsrc=0:c=stereo:s=44100:d=${ci.duration}[na${i}]`)
+        } else {
+          normFilters.push(`[${i}:v]trim=start=${ci.trimIn}:duration=${ci.duration},setpts=PTS-STARTPTS,fps=fps=30,settb=AVTB,${vf},setsar=1[nv${i}]`)
+          if (ci.muted) {
+            normFilters.push(`aevalsrc=0:c=stereo:s=44100:d=${ci.duration}[na${i}]`)
+          } else {
+            normFilters.push(`[${i}:a]atrim=start=${ci.trimIn}:duration=${ci.duration},asetpts=PTS-STARTPTS,aresample=44100[na${i}]`)
+          }
+        }
+      }
+
+      const vFilters: string[] = []
+      const aFilters: string[] = []
+      let cumDur = 0
+      let cumTrans = 0
+      for (let i = 0; i < sortedClips.length - 1; i++) {
+        const t = getTransition(i)
+        cumDur += sortedClips[i].duration
+        const offset = Math.max(0, cumDur - cumTrans - t.duration)
+        cumTrans += t.duration
+        const isLast = i === sortedClips.length - 2
+        const vIn = i === 0 ? "[nv0]" : `[v${i - 1}]`
+        const aIn = i === 0 ? "[na0]" : `[a${i - 1}]`
+        const vOut = isLast ? "[outv]" : `[v${i}]`
+        const aOut = isLast ? "[outa]" : `[a${i}]`
+        vFilters.push(`${vIn}[nv${i + 1}]xfade=transition=${t.type}:duration=${t.duration}:offset=${offset.toFixed(3)}${vOut}`)
+        aFilters.push(`${aIn}[na${i + 1}]acrossfade=d=${t.duration}${aOut}`)
+      }
+
+      expectedDuration = Math.max(0.1, cumDur + sortedClips[sortedClips.length - 1].duration - cumTrans)
+      setProgress("Encoding… 0%")
+
+      if (sortedAudio.length === 0) {
+        const { filters: fcFilters, mapLabel } = applyTextToFc([...normFilters, ...vFilters, ...aFilters], "[outv]")
+        await ffmpeg.exec([...inputs, "-filter_complex", fcFilters.join(";"), "-map", `[${mapLabel}]`, "-map", "[outa]", ...codecArgs, outputFile])
+      } else {
+        const audioTrackFilters = sortedAudio.map((ac, i) =>
+          `[${audioOffset + i}:a]atrim=start=${ac.trimIn}:duration=${ac.duration},asetpts=PTS-STARTPTS,adelay=${Math.round(ac.startTime * 1000)}:all=1,aresample=44100[at${i}]`
+        )
+        const mixInputs = ["[outa]", ...sortedAudio.map((_, i) => `[at${i}]`)].join("")
+        const mixFilter = `${mixInputs}amix=inputs=${1 + sortedAudio.length}:normalize=0[finala]`
+        const { filters: fcFilters, mapLabel } = applyTextToFc([...normFilters, ...vFilters, ...aFilters, ...audioTrackFilters, mixFilter], "[outv]")
+        await ffmpeg.exec([...inputs, "-filter_complex", fcFilters.join(";"), "-map", `[${mapLabel}]`, "-map", "[finala]", ...codecArgs, outputFile])
+      }
+    }
+
+    const data = await ffmpeg.readFile(outputFile)
+    return new Blob([data as Uint8Array], { type: mime })
+  }
 
   async function produceVideo() {
     if (sortedClips.length === 0) {
@@ -121,228 +323,20 @@ export function useProduceVideo({
     setProducing(true)
     setProduceProgress("Loading FFmpeg…")
     try {
-      const { FFmpeg } = await import("@ffmpeg/ffmpeg")
-      const { toBlobURL, fetchFile } = await import("@ffmpeg/util")
-
-      const ffmpeg = new FFmpeg()
-
-      let expectedDuration = 0
-      ffmpeg.on("log", ({ message }) => {
-        console.log("[ffmpeg]", message)
-        if (expectedDuration <= 0) return
-        const m = message.match(/time=(-?\d+):(\d+):(\d+\.?\d*)/)
-        if (!m) return
-        const secs = parseInt(m[1]) * 3600 + parseInt(m[2]) * 60 + parseFloat(m[3])
-        if (secs <= 0) return
-        setProduceProgress(`Encoding… ${Math.min(100, Math.round((secs / expectedDuration) * 100))}%`)
-      })
-
-      const baseURL = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd"
-      await ffmpeg.load({
-        coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
-        wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
-      })
-
-      for (let i = 0; i < sortedClips.length; i++) {
-        const clip = sortedClips[i]
-        const asset = assets.find((a) => a.id === clip.assetId)
-        if (!asset?.publicLink) throw new Error(`Missing download link for clip ${i + 1}`)
-        setProduceProgress(`Loading clip ${i + 1} of ${sortedClips.length}…`)
-        const fileData = await fetchFile(asset.publicLink)
-        await ffmpeg.writeFile(`input${i}.mp4`, fileData)
-      }
-
-      const sortedAudio = audioClips.slice().sort((a, b) => a.startTime - b.startTime)
-      for (let i = 0; i < sortedAudio.length; i++) {
-        setProduceProgress(`Loading audio ${i + 1} of ${sortedAudio.length}…`)
-        const fileData = await fetchFile(sortedAudio[i].url)
-        await ffmpeg.writeFile(`audio${i}`, fileData)
-      }
-
-      // Fonts for drawtext — download each unique font used by text clips
-      const activeTextClips = textClips.filter((tc) => assets.find((a) => a.id === tc.assetId)?.mediaType === "text")
-      const fontPathMap = new Map<string, string>() // fontValue → /tmp/font_xxx.ttf
-      if (activeTextClips.length > 0) {
-        const uniqueFonts = [...new Set(
-          activeTextClips.map((tc) => {
-            const a = assets.find((x) => x.id === tc.assetId)
-            return a?.textFont ?? TEXT_FONTS[0].value
-          })
-        )]
-        for (const fontValue of uniqueFonts) {
-          const fontDef = TEXT_FONTS.find((f) => f.value === fontValue) ?? TEXT_FONTS[0]
-          const safeName = fontValue.replace(/\s+/g, "_")
-          const fontPath = `/tmp/font_${safeName}.ttf`
-          setProduceProgress(`Loading font ${fontDef.label}…`)
-          const fontData = await fetchFile(fontDef.ttfUrl)
-          await ffmpeg.writeFile(fontPath, fontData)
-          fontPathMap.set(fontValue, fontPath)
-        }
-      }
-      const textChain = buildDrawtextChain(activeTextClips, assets, fontPathMap)
-
-      const getTransition = (i: number) => {
-        const boundary = sortedClips[i].startTime + (durations[sortedClips[i].assetId] ?? sortedClips[i].duration)
-        const sorted = transitionClips.slice().sort((a, b) =>
-          Math.abs(a.startTime - boundary) - Math.abs(b.startTime - boundary)
-        )
-        const tc = sorted[0]
-        return tc && Math.abs(tc.startTime - boundary) < 10
-          ? { type: tc.type, duration: tc.duration }
-          : { type: "fade", duration: 1 }
-      }
-
-      const inputs = [
-        ...sortedClips.flatMap((_, i) => ["-i", `input${i}.mp4`]),
-        ...sortedAudio.flatMap((_, i) => ["-i", `audio${i}`]),
-      ]
-      const audioOffset = sortedClips.length
-
-      const { width, height } = selectedFormat
       const ext = outputFormat.toLowerCase()
-      const outputFile = `output.${ext}`
       const mime = outputFormat === "WebM" ? "video/webm" : outputFormat === "MOV" ? "video/quicktime" : "video/mp4"
       const codecArgs = outputFormat === "WebM"
         ? ["-c:v", "libvpx-vp9", "-c:a", "libopus"]
         : ["-c:v", "libx264", "-c:a", "aac", "-pix_fmt", "yuv420p", "-preset", "fast"]
 
-      const vf = buildVfFilter(width, height, cropMode, zoom, rotation)
+      const blob = await runPipeline({
+        format: selectedFormat,
+        codecArgs,
+        outputFile: `output.${ext}`,
+        mime,
+        setProgress: setProduceProgress,
+      })
 
-      const isImageAsset = (assetId: string) =>
-        assets.find((a) => a.id === assetId)?.mediaType === "image"
-
-      const imageVideoFilter = (dur: number) =>
-        `loop=loop=-1:size=1:start=0,trim=duration=${dur},setpts=PTS-STARTPTS,${vf}`
-
-      // Helpers to handle optional text overlay in filter_complex and -vf
-      function applyTextToVf(baseVf: string): string {
-        return textChain ? `${baseVf},${textChain}` : baseVf
-      }
-      function applyTextToFc(filters: string[], videoOutLabel: string): { filters: string[]; mapLabel: string } {
-        if (!textChain) return { filters, mapLabel: videoOutLabel.replace(/[\[\]]/g, "") }
-        const finalLabel = "finalv"
-        return {
-          filters: [...filters, `${videoOutLabel}${textChain}[${finalLabel}]`],
-          mapLabel: finalLabel,
-        }
-      }
-
-      if (sortedClips.length === 1) {
-        const c0 = sortedClips[0]
-        const isImg = isImageAsset(c0.assetId)
-
-        expectedDuration = c0.duration
-        setProduceProgress("Encoding… 0%")
-
-        if (isImg) {
-          const audioTrackFilters = sortedAudio.map((ac, i) =>
-            `[${audioOffset + i}:a]atrim=start=${ac.trimIn}:duration=${ac.duration},asetpts=PTS-STARTPTS,adelay=${Math.round(ac.startTime * 1000)}:all=1,aresample=44100[at${i}]`
-          )
-          const silFilter = `aevalsrc=0:c=stereo:s=44100:d=${c0.duration}[sil]`
-          const baseVFilters = sortedAudio.length === 0
-            ? [`[0:v]${imageVideoFilter(c0.duration)}[outv]`, silFilter]
-            : [`[0:v]${imageVideoFilter(c0.duration)}[outv]`, silFilter, ...audioTrackFilters, `[sil]${sortedAudio.map((_, i) => `[at${i}]`).join("")}amix=inputs=${1 + sortedAudio.length}:normalize=0[finala]`]
-          const { filters: fcFilters, mapLabel } = applyTextToFc(baseVFilters, "[outv]")
-          await ffmpeg.exec([
-            ...inputs,
-            "-filter_complex", fcFilters.join(";"),
-            "-map", `[${mapLabel}]`,
-            "-map", sortedAudio.length === 0 ? "[sil]" : "[finala]",
-            ...codecArgs, outputFile,
-          ])
-        } else {
-          const trimVf = applyTextToVf(`trim=start=${c0.trimIn}:duration=${c0.duration},setpts=PTS-STARTPTS,${vf}`)
-          const videoAf = c0.muted
-            ? `atrim=start=${c0.trimIn}:duration=${c0.duration},asetpts=PTS-STARTPTS,volume=0`
-            : `atrim=start=${c0.trimIn}:duration=${c0.duration},asetpts=PTS-STARTPTS`
-          if (sortedAudio.length === 0) {
-            await ffmpeg.exec([...inputs, "-vf", trimVf, "-af", videoAf, ...codecArgs, outputFile])
-          } else {
-            const audioTrackFilters = sortedAudio.map((ac, i) =>
-              `[${audioOffset + i}:a]atrim=start=${ac.trimIn}:duration=${ac.duration},asetpts=PTS-STARTPTS,adelay=${Math.round(ac.startTime * 1000)}:all=1,aresample=44100[at${i}]`
-            )
-            const mixInputs = ["[va]", ...sortedAudio.map((_, i) => `[at${i}]`)].join("")
-            const filterComplex = [
-              `[0:a]${videoAf}[va]`,
-              ...audioTrackFilters,
-              `${mixInputs}amix=inputs=${1 + sortedAudio.length}:normalize=0[finala]`,
-            ].join(";")
-            await ffmpeg.exec([
-              ...inputs, "-vf", trimVf,
-              "-filter_complex", filterComplex,
-              "-map", "0:v", "-map", "[finala]",
-              ...codecArgs, outputFile,
-            ])
-          }
-        }
-      } else {
-        const normFilters: string[] = []
-        for (let i = 0; i < sortedClips.length; i++) {
-          const ci = sortedClips[i]
-          if (isImageAsset(ci.assetId)) {
-            normFilters.push(`[${i}:v]${imageVideoFilter(ci.duration)},fps=fps=30,settb=AVTB,setsar=1[nv${i}]`)
-            normFilters.push(`aevalsrc=0:c=stereo:s=44100:d=${ci.duration}[na${i}]`)
-          } else {
-            normFilters.push(`[${i}:v]trim=start=${ci.trimIn}:duration=${ci.duration},setpts=PTS-STARTPTS,fps=fps=30,settb=AVTB,${vf},setsar=1[nv${i}]`)
-            if (ci.muted) {
-              normFilters.push(`aevalsrc=0:c=stereo:s=44100:d=${ci.duration}[na${i}]`)
-            } else {
-              normFilters.push(`[${i}:a]atrim=start=${ci.trimIn}:duration=${ci.duration},asetpts=PTS-STARTPTS,aresample=44100[na${i}]`)
-            }
-          }
-        }
-
-        const vFilters: string[] = []
-        const aFilters: string[] = []
-        let cumDur = 0
-        let cumTrans = 0
-
-        for (let i = 0; i < sortedClips.length - 1; i++) {
-          const t = getTransition(i)
-          cumDur += sortedClips[i].duration
-          const offset = Math.max(0, cumDur - cumTrans - t.duration)
-          cumTrans += t.duration
-
-          const isLast = i === sortedClips.length - 2
-          const vIn = i === 0 ? "[nv0]" : `[v${i - 1}]`
-          const aIn = i === 0 ? "[na0]" : `[a${i - 1}]`
-          const vOut = isLast ? "[outv]" : `[v${i}]`
-          const aOut = isLast ? "[outa]" : `[a${i}]`
-
-          vFilters.push(`${vIn}[nv${i + 1}]xfade=transition=${t.type}:duration=${t.duration}:offset=${offset.toFixed(3)}${vOut}`)
-          aFilters.push(`${aIn}[na${i + 1}]acrossfade=d=${t.duration}${aOut}`)
-        }
-
-        expectedDuration = Math.max(0.1, cumDur + sortedClips[sortedClips.length - 1].duration - cumTrans)
-        setProduceProgress("Encoding… 0%")
-
-        if (sortedAudio.length === 0) {
-          const { filters: fcFilters, mapLabel } = applyTextToFc([...normFilters, ...vFilters, ...aFilters], "[outv]")
-          await ffmpeg.exec([
-            ...inputs,
-            "-filter_complex", fcFilters.join(";"),
-            "-map", `[${mapLabel}]`, "-map", "[outa]",
-            ...codecArgs, outputFile,
-          ])
-        } else {
-          const audioTrackFilters = sortedAudio.map((ac, i) =>
-            `[${audioOffset + i}:a]atrim=start=${ac.trimIn}:duration=${ac.duration},asetpts=PTS-STARTPTS,adelay=${Math.round(ac.startTime * 1000)}:all=1,aresample=44100[at${i}]`
-          )
-          const mixInputs = ["[outa]", ...sortedAudio.map((_, i) => `[at${i}]`)].join("")
-          const mixFilter = `${mixInputs}amix=inputs=${1 + sortedAudio.length}:normalize=0[finala]`
-          const { filters: fcFilters, mapLabel } = applyTextToFc([...normFilters, ...vFilters, ...aFilters, ...audioTrackFilters, mixFilter], "[outv]")
-          await ffmpeg.exec([
-            ...inputs,
-            "-filter_complex", fcFilters.join(";"),
-            "-map", `[${mapLabel}]`, "-map", "[finala]",
-            ...codecArgs, outputFile,
-          ])
-        }
-      }
-
-      setProduceProgress("Preparing download…")
-      const data = await ffmpeg.readFile(outputFile)
-      const blob = new Blob([data as Uint8Array], { type: mime })
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = url
@@ -360,5 +354,35 @@ export function useProduceVideo({
     }
   }
 
-  return { produceVideo, producing, produceProgress }
+  async function generatePreview() {
+    if (sortedClips.length === 0) {
+      toast.error("Add clips to the video track first")
+      return
+    }
+    setPreviewing(true)
+    setPreviewProgress("Loading FFmpeg…")
+    try {
+      // Scale to 360px wide — ~3× fewer pixels than 640px, major encoding speedup
+      const pw = Math.min(360, Math.floor(selectedFormat.width / 2) * 2)
+
+      const blob = await runPipeline({
+        format: { width: pw, height: pw }, // height unused when vfOverride is set
+        vfOverride: `scale=${pw}:-2,fps=15`,  // simple scale + 15fps, no pad/crop needed for preview
+        codecArgs: ["-c:v", "libx264", "-c:a", "aac", "-pix_fmt", "yuv420p", "-preset", "ultrafast", "-tune", "zerolatency", "-crf", "40", "-b:a", "64k", "-ar", "22050"],
+        outputFile: "preview.mp4",
+        mime: "video/mp4",
+        setProgress: setPreviewProgress,
+      })
+
+      if (previewUrl) URL.revokeObjectURL(previewUrl)
+      setPreviewUrl(URL.createObjectURL(blob))
+    } catch (err) {
+      toast.error(`Preview failed: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setPreviewing(false)
+      setPreviewProgress(null)
+    }
+  }
+
+  return { produceVideo, producing, produceProgress, generatePreview, previewing, previewProgress, previewUrl, clearPreview }
 }
