@@ -200,51 +200,53 @@ export function StudioSidebar({
           </div>
 
           <Dialog open={textDialogOpen} onOpenChange={setTextDialogOpen}>
-            <DialogContent className="sm:max-w-sm" aria-describedby={undefined}>
+            <DialogContent className="sm:max-w-md" aria-describedby={undefined}>
               <DialogHeader>
                 <DialogTitle>{editingTextId ? "Edit Text Asset" : "New Text Asset"}</DialogTitle>
               </DialogHeader>
               <div className="flex flex-col gap-3 py-1">
+
                 {/* Heading */}
                 <div className="flex flex-col gap-1">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-medium text-muted-foreground">Heading</label>
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs font-medium text-muted-foreground flex-1">Heading</label>
                     <input
                       type="number" min={8} max={200} value={headingSize}
                       onChange={(e) => setHeadingSize(Math.max(8, Math.min(200, Number(e.target.value))))}
-                      className="text-xs px-2 py-0.5 rounded border border-border bg-background outline-none focus:ring-1 focus:ring-ring w-14 text-right"
-                      title="Heading font size"
+                      className="text-xs px-2 py-0.5 rounded border border-border bg-background outline-none focus:ring-1 focus:ring-ring w-14 text-center"
                     />
+                    <span className="text-xs text-muted-foreground">px</span>
                   </div>
                   <input
                     autoFocus
-                    placeholder="Large text shown in video (also used as label)"
+                    placeholder="Large title text…"
                     value={textHeading}
                     onChange={(e) => setTextHeading(e.target.value)}
                     className="text-sm px-3 py-1.5 rounded border border-border bg-background w-full outline-none focus:ring-1 focus:ring-ring"
                   />
                 </div>
+
                 {/* Body */}
                 <div className="flex flex-col gap-1">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-medium text-muted-foreground">Text</label>
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs font-medium text-muted-foreground flex-1">Text</label>
                     <input
                       type="number" min={8} max={200} value={textSize}
                       onChange={(e) => setTextSize(Math.max(8, Math.min(200, Number(e.target.value))))}
-                      className="text-xs px-2 py-0.5 rounded border border-border bg-background outline-none focus:ring-1 focus:ring-ring w-14 text-right"
-                      title="Body font size"
+                      className="text-xs px-2 py-0.5 rounded border border-border bg-background outline-none focus:ring-1 focus:ring-ring w-14 text-center"
                     />
+                    <span className="text-xs text-muted-foreground">px</span>
                   </div>
-                  <textarea
-                    placeholder="Smaller text shown in video"
+                  <input
+                    placeholder="Smaller body text…"
                     value={textBody}
                     onChange={(e) => setTextBody(e.target.value)}
-                    rows={2}
-                    className="text-sm px-3 py-1.5 rounded border border-border bg-background w-full outline-none focus:ring-1 focus:ring-ring resize-none"
+                    className="text-sm px-3 py-1.5 rounded border border-border bg-background w-full outline-none focus:ring-1 focus:ring-ring"
                   />
                 </div>
-                {/* Font + opacity row */}
-                <div className="flex gap-2">
+
+                {/* Font + Color */}
+                <div className="flex gap-3 items-end">
                   <div className="flex flex-col gap-1 flex-1">
                     <label className="text-xs font-medium text-muted-foreground">Font</label>
                     <select
@@ -257,63 +259,62 @@ export function StudioSidebar({
                       ))}
                     </select>
                   </div>
-                  <div className="flex flex-col gap-1 w-28">
-                    <label className="text-xs font-medium text-muted-foreground">Opacity — {textOpacity}%</label>
-                    <input
-                      type="range" min={0} max={100} value={textOpacity}
-                      onChange={(e) => setTextOpacity(Number(e.target.value))}
-                      className="w-full accent-primary mt-1"
-                    />
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-medium text-muted-foreground">Color</label>
+                    <div className="flex items-center gap-1.5">
+                      <input type="color" value={textColor} onChange={(e) => setTextColor(e.target.value)}
+                        className="h-[30px] w-10 rounded border border-border cursor-pointer p-0.5 bg-background" />
+                      <span className="text-xs font-mono text-muted-foreground">{textColor}</span>
+                    </div>
                   </div>
                 </div>
 
-                {/* Color row */}
+                {/* Opacity */}
                 <div className="flex flex-col gap-1">
-                  <label className="text-xs font-medium text-muted-foreground">Text color</label>
-                  <div className="flex items-center gap-2">
-                    <input type="color" value={textColor} onChange={(e) => setTextColor(e.target.value)}
-                      className="h-7 w-10 rounded border border-border cursor-pointer p-0.5 bg-background" />
-                    <span className="text-xs font-mono text-muted-foreground">{textColor}</span>
+                  <label className="text-xs font-medium text-muted-foreground">Opacity — {textOpacity}%</label>
+                  <input
+                    type="range" min={0} max={100} value={textOpacity}
+                    onChange={(e) => setTextOpacity(Number(e.target.value))}
+                    className="w-full accent-primary"
+                  />
+                </div>
+
+                {/* Position + Preview */}
+                <div className="flex gap-3">
+                  <div className="flex flex-col gap-1 shrink-0">
+                    <label className="text-xs font-medium text-muted-foreground">Position</label>
+                    <div className="grid grid-cols-3 gap-1">
+                      {POSITION_GRID.map(({ pos, icon: Icon }) => {
+                        const selected = textPosition === pos
+                        return (
+                          <button
+                            key={pos}
+                            type="button"
+                            onClick={() => setTextPosition(pos)}
+                            className={`h-8 w-8 flex items-center justify-center rounded border transition-colors ${selected ? "bg-primary border-primary text-primary-foreground" : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"}`}
+                            title={pos.replace("-", " ")}
+                          >
+                            {Icon ? <Icon className="h-3.5 w-3.5" /> : <span className="h-2 w-2 rounded-full bg-current block" />}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-1 flex-1">
+                    <label className="text-xs font-medium text-muted-foreground">Preview</label>
+                    <div
+                      className="flex-1 rounded border border-border overflow-hidden flex items-center justify-center"
+                      style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Crect width='8' height='8' fill='%23ccc'/%3E%3Crect x='8' y='8' width='8' height='8' fill='%23ccc'/%3E%3C/svg%3E\")", backgroundColor: "#eee" }}
+                    >
+                      <div style={{ opacity: textOpacity / 100, fontFamily: `'${textFont}', sans-serif`, color: textColor, lineHeight: 1.4, textAlign: "center", padding: "8px" }}>
+                        {textHeading && <div style={{ fontSize: Math.min(headingSize, 28), whiteSpace: "pre-wrap" }}>{textHeading}</div>}
+                        {textBody && <div style={{ fontSize: Math.min(textSize, 18), whiteSpace: "pre-wrap" }}>{textBody}</div>}
+                        {!textHeading && !textBody && <div style={{ fontSize: 13, opacity: 0.4 }}>Preview</div>}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                {/* Position picker */}
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-medium text-muted-foreground">Position</label>
-                  <div className="grid grid-cols-3 gap-1 w-fit">
-                    {POSITION_GRID.map(({ pos, icon: Icon }) => {
-                      const selected = textPosition === pos
-                      return (
-                        <button
-                          key={pos}
-                          type="button"
-                          onClick={() => setTextPosition(pos)}
-                          className={`h-8 w-8 flex items-center justify-center rounded border transition-colors ${selected ? "bg-primary border-primary text-primary-foreground" : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"}`}
-                          title={pos.replace("-", " ")}
-                        >
-                          {Icon ? <Icon className="h-3.5 w-3.5" /> : <span className="h-2 w-2 rounded-full bg-current block" />}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-
-                {/* Preview */}
-                <div className="rounded border border-border overflow-hidden flex items-center justify-center h-24"
-                  style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Crect width='8' height='8' fill='%23ccc'/%3E%3Crect x='8' y='8' width='8' height='8' fill='%23ccc'/%3E%3C/svg%3E\")", backgroundColor: "#eee" }}
-                >
-                  <div style={{ opacity: textOpacity / 100, fontFamily: `'${textFont}', sans-serif`, color: textColor, lineHeight: 1.4, textAlign: "center" }}>
-                    {textHeading && (
-                      <div style={{ fontSize: Math.min(headingSize, 32), whiteSpace: "pre-wrap" }}>{textHeading}</div>
-                    )}
-                    {textBody && (
-                      <div style={{ fontSize: Math.min(textSize, 22), whiteSpace: "pre-wrap" }}>{textBody}</div>
-                    )}
-                    {!textHeading && !textBody && (
-                      <div style={{ fontSize: 16, opacity: 0.4 }}>Preview</div>
-                    )}
-                  </div>
-                </div>
               </div>
               <DialogFooter>
                 <Button variant="outline" size="sm" onClick={() => setTextDialogOpen(false)}>Cancel</Button>

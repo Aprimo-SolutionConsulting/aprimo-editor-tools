@@ -6,15 +6,20 @@ export interface FontOption {
   ttfUrl: string  // direct TTF download URL for FFmpeg
 }
 
+// Fonts are bundled under their respective open-source licenses:
+// Roboto — Apache 2.0 (https://www.apache.org/licenses/LICENSE-2.0)
+// Ubuntu — Ubuntu Font Licence 1.0 (https://ubuntu.com/legal/font-licence)
+// All others — SIL Open Font License 1.1 (https://openfontlicense.org)
+// Originals via Google Fonts (https://fonts.google.com)
 export const TEXT_FONTS: FontOption[] = [
-  { label: "Roboto",           value: "Roboto",           ttfUrl: "https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1Me5Q.ttf" },
-  { label: "Lato",             value: "Lato",             ttfUrl: "https://fonts.gstatic.com/s/lato/v24/S6uyw4BMUTPHjx4wXiWtFCc.ttf" },
-  { label: "Poppins",          value: "Poppins",          ttfUrl: "https://fonts.gstatic.com/s/poppins/v21/pxiEyp8kv8JHgFVrJJfecg.ttf" },
-  { label: "Montserrat",       value: "Montserrat",       ttfUrl: "https://fonts.gstatic.com/s/montserrat/v26/JTUSjIg1_i6t8kCHKm459Wlhyw.ttf" },
-  { label: "Oswald",           value: "Oswald",           ttfUrl: "https://fonts.gstatic.com/s/oswald/v49/TK3_WkUHHAIjg75cFRf3bXL8LICs1_FvsUhiZTaI.ttf" },
-  { label: "Merriweather",     value: "Merriweather",     ttfUrl: "https://fonts.gstatic.com/s/merriweather/v30/u-440qyriQwlOrhSvowK_l5-fCZM.ttf" },
-  { label: "Playfair Display", value: "Playfair Display", ttfUrl: "https://fonts.gstatic.com/s/playfairdisplay/v37/nuFiD-vYSZviVYUb_rj3ij__anPXBYf9lW4e5vEpz_V2LpffKnvuEA.ttf" },
-  { label: "Ubuntu",           value: "Ubuntu",           ttfUrl: "https://fonts.gstatic.com/s/ubuntu/v20/4iCs6KVjbNBYlgoKcg72j00.ttf" },
+  { label: "Roboto",           value: "Roboto",           ttfUrl: "/fonts/Roboto-Regular.ttf" },
+  { label: "Lato",             value: "Lato",             ttfUrl: "/fonts/Lato-Regular.ttf" },
+  { label: "Poppins",          value: "Poppins",          ttfUrl: "/fonts/Poppins-Regular.ttf" },
+  { label: "Montserrat",       value: "Montserrat",       ttfUrl: "/fonts/Montserrat-Regular.ttf" },
+  { label: "Oswald",           value: "Oswald",           ttfUrl: "/fonts/Oswald-Regular.ttf" },
+  { label: "Merriweather",     value: "Merriweather",     ttfUrl: "/fonts/Merriweather-Regular.ttf" },
+  { label: "Playfair Display", value: "Playfair Display", ttfUrl: "/fonts/PlayfairDisplay-Regular.ttf" },
+  { label: "Ubuntu",           value: "Ubuntu",           ttfUrl: "/fonts/Ubuntu-Regular.ttf" },
 ]
 
 export type TextPosition =
