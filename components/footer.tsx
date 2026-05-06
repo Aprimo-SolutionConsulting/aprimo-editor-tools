@@ -10,7 +10,16 @@ export function Footer() {
             <span className="font-semibold">Aprimo Editor Tools</span>
           </div>
           <p className="text-sm text-muted-foreground">
-            &copy; 2026 Aprimo. All rights reserved.
+            Open source &mdash;{" "}
+            <a
+              href="https://github.com/Aprimo-SolutionConsulting/aprimo-editor-tools"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline underline-offset-2 hover:text-foreground transition-colors"
+            >
+              view on GitHub
+            </a>
+            {" "}&mdash; &copy; 2026 Aprimo
           </p>
         </div>
       </div>

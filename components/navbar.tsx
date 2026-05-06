@@ -20,8 +20,9 @@ export function Navbar() {
     <nav className="bg-background sticky top-0 z-50">
       <div className="border-b border-border px-6">
         <div className="flex items-center justify-between h-14">
-          <Link href="/">
-            <Image src="/images/aprimo-logo.svg" alt="Aprimo" width={0} height={0} style={{ width: 90, height: "auto" }} />
+          <Link href="/" className="flex flex-col items-center gap-0">
+            <Image src="/images/aprimo-logo.svg" alt="Aprimo" width={0} height={0} style={{ width: 75, height: "auto" }} />
+            <span className="text-xs text-muted-foreground tracking-wide">Open Source</span>
           </Link>
 
           <div className="flex items-center gap-6 text-sm">
