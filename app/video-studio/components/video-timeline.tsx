@@ -42,6 +42,7 @@ interface VideoTimelineProps {
   draggingTransitionType: string | null
   setDraggingTransitionType: (t: string | null) => void
   videoEndTime: number
+  disableFades: boolean
 }
 
 export function VideoTimeline({
@@ -62,6 +63,7 @@ export function VideoTimeline({
   draggingTransitionType,
   setDraggingTransitionType,
   videoEndTime,
+  disableFades,
 }: VideoTimelineProps) {
   const timelineScrollRef = useRef<HTMLDivElement>(null)
   const [pps, setPps] = useState(PIXELS_PER_SECOND) // pixels per second — zoom level
@@ -348,7 +350,7 @@ export function VideoTimeline({
             <button className={iconBtn} onClick={fitToContent} title="Fit to content" style={{ fontSize: 9, width: "auto", paddingInline: 2 }}>Fit</button>
             <button className={iconBtn} onClick={zoomIn} title="Zoom in"><Plus className="h-3 w-3" /></button>
           </div>
-          {TRACKS.map(({ label, icon: Icon, color, bg }) => (
+          {TRACKS.filter((t) => !(disableFades && t.label === "Transitions")).map(({ label, icon: Icon, color, bg }) => (
             <div key={label} className={`h-12 flex items-center gap-2 px-3 border-b border-border last:border-0 ${bg}`}>
               <Icon className={`h-3.5 w-3.5 shrink-0 ${color}`} />
               <span className={`text-xs font-medium ${color}`}>{label}</span>
@@ -372,7 +374,7 @@ export function VideoTimeline({
             </div>
 
             {/* Track lanes */}
-            {TRACKS.map(({ label }) => (
+            {TRACKS.filter((t) => !(disableFades && t.label === "Transitions")).map(({ label }) => (
               <div
                 key={label}
                 className={`h-12 border-b border-border last:border-0 relative transition-colors ${label === "Video" && dropTarget ? "bg-blue-500/10" : ""} ${label === "Transitions" && transitionDropTarget ? "bg-purple-500/10" : ""} ${label === "Audio" && audioDropTarget ? "bg-green-500/10" : ""} ${label === "Text" && textDropTarget ? "bg-orange-500/10" : ""}`}

@@ -2,6 +2,8 @@
 
 import { Loader2, Braces, Download, ExternalLink } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Switch } from "@/components/ui/switch"
+import { Label } from "@/components/ui/label"
 import { VideoClip } from "../types"
 
 interface StudioProduceBarProps {
@@ -15,6 +17,8 @@ interface StudioProduceBarProps {
   vsSettingsReady: boolean
   sortedClips: VideoClip[]
   isDev: boolean
+  disableFades: boolean
+  onDisableFadesChange: (v: boolean) => void
   onDownload: () => void
   onSaveOrUpdate: () => void
   onOpenStateDialog: () => void
@@ -25,7 +29,8 @@ export function StudioProduceBar({
   isBusy, activeProgress, progressValue,
   producing, downloading,
   savedRecordUrl, savedRecordId, vsSettingsReady,
-  sortedClips, isDev, onDownload, onSaveOrUpdate, onOpenStateDialog, onOpenLoadDialog,
+  sortedClips, isDev, disableFades, onDisableFadesChange,
+  onDownload, onSaveOrUpdate, onOpenStateDialog, onOpenLoadDialog,
 }: StudioProduceBarProps) {
   return (
     <div className="shrink-0 border-t border-border bg-background">
@@ -38,7 +43,13 @@ export function StudioProduceBar({
       </div>
 
       <div className="px-4 py-2 flex items-center justify-between gap-2">
-        <span className="text-xs text-muted-foreground tabular-nums">{activeProgress}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground tabular-nums">{activeProgress}</span>
+          <div className="flex items-center gap-1.5">
+            <Switch id="disable-fades" checked={disableFades} onCheckedChange={onDisableFadesChange} disabled={isBusy} />
+            <Label htmlFor="disable-fades" className="text-xs cursor-pointer">Disable Transitions</Label>
+          </div>
+        </div>
         <div className="flex items-center gap-2">
           {isDev && (
             <>

@@ -22,6 +22,7 @@ interface UseProduceVideoParams {
   rotation: number
   outputFormat: string
   previewWidth: 360 | 720 | 1280
+  disableFades: boolean
   initialRecordId?: string | null
 }
 
@@ -38,7 +39,7 @@ function codecArgs(format: string): string[] {
 export function useProduceVideo({
   sortedClips, audioClips, assets, durations, transitionClips, textClips,
   platform, selectedFormat, cropMode, zoom, rotation, outputFormat, previewWidth,
-  initialRecordId,
+  disableFades, initialRecordId,
 }: UseProduceVideoParams) {
   const { client, connection } = useAprimo()
 
@@ -64,7 +65,7 @@ export function useProduceVideo({
     setPreviewUrl(null)
   }
 
-  const pipelineBase = { sortedClips, audioClips, transitionClips, textClips, assets, durations, cropMode, zoom, rotation }
+  const pipelineBase = { sortedClips, audioClips, transitionClips, textClips, assets, durations, cropMode, zoom, rotation, disableFades }
 
   async function produceVideo(projectName?: string) {
     if (sortedClips.length === 0) { toast.error("Add clips to the video track first"); return }

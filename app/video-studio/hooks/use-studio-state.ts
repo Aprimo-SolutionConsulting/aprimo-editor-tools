@@ -33,6 +33,7 @@ export function useStudioState({ recordParam }: { recordParam: string | null }) 
 
   // Preview
   const [previewWidth, setPreviewWidth] = useState<360 | 720 | 1280>(360)
+  const [disableFades, setDisableFades] = useState(false)
 
   // State inspector / loader
   const [stateJson, setStateJson] = useState<string | null>(null)
@@ -171,6 +172,7 @@ export function useStudioState({ recordParam }: { recordParam: string | null }) 
     rotation, setRotation,
     outputFormat, setOutputFormat,
     previewWidth, setPreviewWidth,
+    disableFades, setDisableFades,
     stateJson, setStateJson,
     loadDialogOpen, setLoadDialogOpen,
     loadInput, setLoadInput,

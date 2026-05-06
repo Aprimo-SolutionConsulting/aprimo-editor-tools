@@ -80,6 +80,16 @@ A browser-based non-linear video editor. Select multiple Aprimo assets, arrange 
 
 Drag a transition chip from the sidebar between two clips on the video track. Uses FFmpeg's `xfade` filter — supported types include fade, dissolve, wipe (left/right/up/down), slide, circle, pixelize, zoom, and more.
 
+> **How transitions consume clip content.** An `xfade` transition of duration _N_ seconds works by blending the _last N seconds_ of clip A with the _first N seconds_ of clip B. This means those frames from both clips are visible but overlapped — they are not cut from the output, they are shared between the two clips during the blend. If this feels like frames are being lost, it is expected behavior: a 1-second fade will "use up" 1 second from the tail of clip A and 1 second from the head of clip B. To minimize this, shorten the transition duration — a 0.25-second fade consumes far less clip content than a 1-second fade — or use the **Disable Transitions** toggle for a hard cut (see below).
+
+**Disable Transitions toggle**
+
+The **Disable Transitions** switch in the bottom bar replaces all `xfade`/`acrossfade` filters with a simple frame-accurate `concat`. When enabled:
+
+- The Transitions track is hidden and any placed transition chips are ignored during encoding.
+- Clips are joined with a clean hard cut — no frames are shared between clips.
+- Use this mode when exact clip boundaries matter more than visual blending effects.
+
 **Output settings**
 
 Choose a platform preset (YouTube, Instagram, TikTok, Facebook, LinkedIn, X, or custom), aspect ratio, crop mode (fill / fit), zoom, and rotation. Output formats: MP4 (H.264) and WebM (VP9).

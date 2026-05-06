@@ -93,10 +93,22 @@ export interface RunPipelineParams {
   format: { width: number; height: number }
   vfOverride?: string
   normFps?: number
+  disableFades?: boolean
   codecArgs: string[]
   outputFile: string
   mime: string
   setProgress: (s: string) => void
+}
+
+let _coreURLPromise: Promise<string> | null = null
+let _wasmURLPromise: Promise<string> | null = null
+
+async function loadFFmpegCore(ffmpeg: import("@ffmpeg/ffmpeg").FFmpeg) {
+  const { toBlobURL } = await import("@ffmpeg/util")
+  const base = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd"
+  if (!_coreURLPromise) _coreURLPromise = toBlobURL(`${base}/ffmpeg-core.js`, "text/javascript")
+  if (!_wasmURLPromise) _wasmURLPromise = toBlobURL(`${base}/ffmpeg-core.wasm`, "application/wasm")
+  await ffmpeg.load({ coreURL: await _coreURLPromise, wasmURL: await _wasmURLPromise })
 }
 
 export async function runPipeline({
@@ -112,13 +124,14 @@ export async function runPipeline({
   format,
   vfOverride,
   normFps,
+  disableFades,
   codecArgs,
   outputFile,
   mime,
   setProgress,
 }: RunPipelineParams): Promise<Blob> {
   const { FFmpeg } = await import("@ffmpeg/ffmpeg")
-  const { toBlobURL, fetchFile } = await import("@ffmpeg/util")
+  const { fetchFile } = await import("@ffmpeg/util")
 
   setProgress("Loading FFmpeg…")
   const ffmpeg = new FFmpeg()
@@ -134,11 +147,13 @@ export async function runPipeline({
     setProgress(`Encoding… ${Math.min(99, Math.round((secs / expectedDuration) * 100))}%`)
   })
 
-  const baseURL = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd"
-  await ffmpeg.load({
-    coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
-    wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
-  })
+  await loadFFmpegCore(ffmpeg)
+
+  const vfsFiles: string[] = []
+  const writeFile = async (name: string, data: Parameters<typeof ffmpeg.writeFile>[1]) => {
+    await ffmpeg.writeFile(name, data)
+    vfsFiles.push(name)
+  }
 
   try {
     for (let i = 0; i < sortedClips.length; i++) {
@@ -146,13 +161,13 @@ export async function runPipeline({
       const asset = assets.find((a) => a.id === clip.assetId)
       if (!asset?.publicLink) throw new Error(`Missing download link for clip ${i + 1}`)
       setProgress(`Loading clip ${i + 1} of ${sortedClips.length}…`)
-      await ffmpeg.writeFile(`input${i}.mp4`, await fetchFile(asset.publicLink))
+      await writeFile(`input${i}.mp4`, await fetchFile(asset.publicLink))
     }
 
     const sortedAudio = audioClips.slice().sort((a, b) => a.startTime - b.startTime)
     for (let i = 0; i < sortedAudio.length; i++) {
       setProgress(`Loading audio ${i + 1} of ${sortedAudio.length}…`)
-      await ffmpeg.writeFile(`audio${i}`, await fetchFile(sortedAudio[i].url))
+      await writeFile(`audio${i}`, await fetchFile(sortedAudio[i].url))
     }
 
     const activeTextClips = textClips.filter((tc) => assets.find((a) => a.id === tc.assetId)?.mediaType === "text")
@@ -165,7 +180,7 @@ export async function runPipeline({
         const fontDef = TEXT_FONTS.find((f) => f.value === fontValue) ?? TEXT_FONTS[0]
         const fontPath = `/tmp/font_${fontValue.replace(/\s+/g, "_")}.ttf`
         setProgress(`Loading font ${fontDef.label}…`)
-        await ffmpeg.writeFile(fontPath, await fetchFile(fontDef.ttfUrl))
+        await writeFile(fontPath, await fetchFile(fontDef.ttfUrl))
         fontPathMap.set(fontValue, fontPath)
       }
     }
@@ -258,31 +273,40 @@ export async function runPipeline({
         }
       }
 
-      const vFilters: string[] = []
-      const aFilters: string[] = []
-      let cumDur = 0
-      let cumTrans = 0
-      for (let i = 0; i < sortedClips.length - 1; i++) {
-        const raw = getTransition(i)
-        const maxDur = Math.min(
-          1.5,
-          sortedClips[i].duration / 2,
-          sortedClips[i + 1].duration / 2,
-        )
-        const t = { ...raw, duration: Math.min(raw.duration, maxDur) }
-        cumDur += sortedClips[i].duration
-        const offset = Math.max(0, cumDur - cumTrans - t.duration)
-        cumTrans += t.duration
-        const isLast = i === sortedClips.length - 2
-        const vIn = i === 0 ? "[nv0]" : `[v${i - 1}]`
-        const aIn = i === 0 ? "[na0]" : `[a${i - 1}]`
-        const vOut = isLast ? "[outv]" : `[v${i}]`
-        const aOut = isLast ? "[outa]" : `[a${i}]`
-        vFilters.push(`${vIn}[nv${i + 1}]xfade=transition=${t.type}:duration=${t.duration}:offset=${offset.toFixed(3)}${vOut}`)
-        aFilters.push(`${aIn}[na${i + 1}]acrossfade=d=${t.duration}${aOut}`)
-      }
+      let vFilters: string[]
+      let aFilters: string[]
 
-      expectedDuration = Math.max(0.1, cumDur + sortedClips[sortedClips.length - 1].duration - cumTrans)
+      if (disableFades) {
+        const n = sortedClips.length
+        vFilters = [`${sortedClips.map((_, i) => `[nv${i}]`).join("")}concat=n=${n}:v=1:a=0[outv]`]
+        aFilters = [`${sortedClips.map((_, i) => `[na${i}]`).join("")}concat=n=${n}:v=0:a=1[outa]`]
+        expectedDuration = Math.max(0.1, sortedClips.reduce((s, c) => s + c.duration, 0))
+      } else {
+        vFilters = []
+        aFilters = []
+        let cumDur = 0
+        let cumTrans = 0
+        for (let i = 0; i < sortedClips.length - 1; i++) {
+          const raw = getTransition(i)
+          const maxDur = Math.min(
+            1.5,
+            sortedClips[i].duration / 2,
+            sortedClips[i + 1].duration / 2,
+          )
+          const t = { ...raw, duration: Math.min(raw.duration, maxDur) }
+          cumDur += sortedClips[i].duration
+          const offset = Math.max(0, cumDur - cumTrans - t.duration)
+          cumTrans += t.duration
+          const isLast = i === sortedClips.length - 2
+          const vIn = i === 0 ? "[nv0]" : `[v${i - 1}]`
+          const aIn = i === 0 ? "[na0]" : `[a${i - 1}]`
+          const vOut = isLast ? "[outv]" : `[v${i}]`
+          const aOut = isLast ? "[outa]" : `[a${i}]`
+          vFilters.push(`${vIn}[nv${i + 1}]xfade=transition=${t.type}:duration=${t.duration}:offset=${offset.toFixed(3)}${vOut}`)
+          aFilters.push(`${aIn}[na${i + 1}]acrossfade=d=${t.duration}${aOut}`)
+        }
+        expectedDuration = Math.max(0.1, cumDur + sortedClips[sortedClips.length - 1].duration - cumTrans)
+      }
       setProgress("Encoding… 0%")
 
       const videoInputs = sortedClips.flatMap((_, i) => ["-i", `input${i}.mp4`])
@@ -295,6 +319,7 @@ export async function runPipeline({
         // WASM because the muxer's audio queue fills while xfade buffers clip 0 frames.
         // Pass 1 — video only (no circular audio/video dependency):
         const { filters: pass1Filters, mapLabel: videoLabel } = applyTextToFc([...videoNormFilters, ...vFilters], "[outv]")
+        vfsFiles.push("temp_pass1.mkv")
         await ffmpeg.exec([
           ...videoInputs,
           "-filter_complex", pass1Filters.join(";"),
@@ -332,9 +357,13 @@ export async function runPipeline({
     }
 
     setProgress("Encoding… 100%")
-    const data = await ffmpeg.readFile(outputFile) as Uint8Array
-    return new Blob([data], { type: mime })
+    vfsFiles.push(outputFile)
+    const data = await ffmpeg.readFile(outputFile)
+    return new Blob([data instanceof Uint8Array ? new Uint8Array(data) : data], { type: mime })
   } finally {
+    for (const f of vfsFiles) {
+      try { await ffmpeg.deleteFile(f) } catch { /* already gone */ }
+    }
     try { ffmpeg.terminate() } catch { /* worker already gone */ }
   }
 }

@@ -42,6 +42,7 @@ function VideoStudioContent() {
     rotation: s.rotation,
     outputFormat: s.outputFormat,
     previewWidth: s.previewWidth,
+    disableFades: s.disableFades,
     initialRecordId: recordParam,
   })
 
@@ -146,6 +147,7 @@ function VideoStudioContent() {
           draggingTransitionType={s.draggingTransitionType}
           setDraggingTransitionType={s.setDraggingTransitionType}
           videoEndTime={s.videoEndTime}
+          disableFades={s.disableFades}
         />
       </div>
 
@@ -160,6 +162,8 @@ function VideoStudioContent() {
         vsSettingsReady={s.vsSettingsReady}
         sortedClips={s.sortedClips}
         isDev={process.env.NODE_ENV === "development"}
+        disableFades={s.disableFades}
+        onDisableFadesChange={s.setDisableFades}
         onDownload={downloadVideo}
         onSaveOrUpdate={() => savedRecordId ? produceVideo() : s.setSaveDialogOpen(true)}
         onOpenStateDialog={s.buildStateJson}
