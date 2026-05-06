@@ -96,6 +96,9 @@ export function VideoTimeline({
     setPps(clamped)
   }
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (sortedClips.length > 0) fitToContent() }, [sortedClips.length])
+
   useEffect(() => {
     if (!resizingTransition) return
     function onMouseMove(e: MouseEvent) {

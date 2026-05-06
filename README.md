@@ -4,6 +4,8 @@ A Next.js application for connecting to Aprimo using PKCE authentication and wor
 
 > **This is a community-supported project and is not officially maintained or supported by Aprimo.**
 
+> **Aprimo JS SDK** — This project relies on the [Aprimo JS SDK](https://github.com/Timw255/aprimo-js) by [@Timw255](https://github.com/Timw255) for all Aprimo API communication, PKCE authentication, and file upload.
+
 ## Tools
 
 ### Bulk Upload
@@ -140,7 +142,7 @@ Import metadata from an Excel file into Aprimo records.
 
 ### Authentication
 
-Connects to Aprimo using the PKCE OAuth flow via the [Aprimo JS SDK](https://github.com/Aprimo-Connect/aprimo-js). Credentials are stored in `localStorage` after first use.
+Connects to Aprimo using the PKCE OAuth flow via the [Aprimo JS SDK](https://github.com/Timw255/aprimo-js). Credentials are stored in `localStorage` after first use.
 
 Connection can be pre-configured via environment variables so the modal is skipped entirely:
 

@@ -52,7 +52,7 @@ function VideoStudioContent() {
   const progressValue  = progressPct != null ? parseInt(progressPct) : null
 
   return (
-    <main className="flex-1 flex flex-col min-h-0">
+    <main className="flex-1 flex flex-col">
 
       <StudioDialogs
         loadDialogOpen={s.loadDialogOpen}
@@ -80,12 +80,12 @@ function VideoStudioContent() {
         onTrimChange={s.handleTrimChange}
       />
 
-      <div className="relative flex-1 flex flex-col min-h-0">
+      <div className="relative flex flex-col">
         {isBusy && (
           <div className="absolute inset-0 z-30 bg-background/60 backdrop-blur-[1px] cursor-wait" />
         )}
 
-        <div className="flex-1 flex min-h-0">
+        <div className="flex h-[55vh] overflow-hidden">
           <StudioSidebar
             assets={s.assets}
             setAssets={s.setAssets}
@@ -109,7 +109,7 @@ function VideoStudioContent() {
             setPreviewWidth={s.setPreviewWidth}
           />
 
-          <div className="shrink-0 border-l border-border overflow-y-auto">
+          <div className="shrink-0 border-l border-border">
             <VideoSettingsPanel
               platform={s.platform}
               formatIndex={s.formatIndex}
@@ -176,7 +176,7 @@ function VideoStudioContent() {
 
 export default function VideoStudioPage() {
   return (
-    <div className="h-screen bg-background flex flex-col">
+    <div className="bg-background flex flex-col">
       <Navbar />
       <Suspense fallback={null}>
         <VideoStudioContent />

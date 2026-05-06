@@ -20,8 +20,8 @@ export function StudioPreview({
   previewing, isBusy, sortedClips, previewWidth, setPreviewWidth,
 }: StudioPreviewProps) {
   return (
-    <div className="flex-1 flex flex-col min-h-0">
-      <div className="flex-1 flex items-center justify-center bg-muted/30 overflow-hidden min-h-0 p-2">
+    <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex items-center justify-center bg-muted/30 overflow-hidden p-2">
         {previewUrl ? (
           <video src={previewUrl} controls className="max-w-full max-h-full rounded shadow-md" />
         ) : (

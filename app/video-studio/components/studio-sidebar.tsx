@@ -200,7 +200,7 @@ export function StudioSidebar({
   const readyCount = assets.filter((a) => a.publicLink).length
 
   return (
-    <div className="w-60 shrink-0 border-r border-border flex flex-col min-h-0">
+    <div className="w-60 shrink-0 border-r border-border flex flex-col">
       <div className="flex border-b border-border shrink-0">
         <button
           onClick={() => setSidebarTab("assets")}
@@ -395,7 +395,7 @@ export function StudioSidebar({
               </DialogFooter>
             </DialogContent>
           </Dialog>
-          <div className="flex-1 overflow-auto">
+          <div className="flex-1 min-h-0 overflow-auto">
             {assets.length === 0 && (
               <div className="flex flex-col items-center justify-center gap-2 h-full text-muted-foreground p-4">
                 <Clapperboard className="h-6 w-6 opacity-40" />
@@ -476,7 +476,7 @@ export function StudioSidebar({
       )}
 
       {sidebarTab === "transitions" && (
-        <div className="flex-1 overflow-auto p-2">
+        <div className="flex-1 min-h-0 overflow-auto p-2">
           <div className="grid grid-cols-2 gap-1">
             {TRANSITIONS.map((t) => (
               <div
