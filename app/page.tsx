@@ -59,7 +59,7 @@ export default function Home() {
                     <h2 className="text-lg font-semibold">Video Studio</h2>
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    Select assets from Aprimo and generate public download links.
+                    Select assets from Aprimo and generate a video.
                   </p>
                 </div>
               </Link>
