@@ -99,7 +99,7 @@ export function VideoTimeline({
     function onMouseMove(e: MouseEvent) {
       const delta = (e.clientX - resizingTransition!.startX) / ppsRef.current
       setTransitionClips((prev) => prev.map((tc) =>
-        tc.id === resizingTransition!.id ? { ...tc, duration: Math.max(0.25, resizingTransition!.startDuration + delta) } : tc
+        tc.id === resizingTransition!.id ? { ...tc, duration: Math.min(1.5, Math.max(0.25, resizingTransition!.startDuration + delta)) } : tc
       ))
     }
     function onMouseUp() { setResizingTransition(null) }

@@ -241,19 +241,20 @@ export async function runPipeline({
       }
     } else {
       const fps = normFps ?? 30
-      const normFilters: string[] = []
+      // Split video and audio normalization so pass 1 can be video-only
+      const videoNormFilters: string[] = []
+      const audioNormFilters: string[] = []
       for (let i = 0; i < sortedClips.length; i++) {
         const ci = sortedClips[i]
         if (isImageAsset(ci.assetId)) {
-          normFilters.push(`[${i}:v]${imageVideoFilter(ci.duration)},fps=fps=${fps},settb=AVTB,setsar=1[nv${i}]`)
-          normFilters.push(`aevalsrc=0:c=stereo:s=44100:d=${ci.duration}[na${i}]`)
+          videoNormFilters.push(`[${i}:v]${imageVideoFilter(ci.duration)},fps=fps=${fps},settb=AVTB,setsar=1[nv${i}]`)
+          audioNormFilters.push(`aevalsrc=0:c=stereo:s=44100:d=${ci.duration}[na${i}]`)
         } else {
-          normFilters.push(`[${i}:v]trim=start=${ci.trimIn}:duration=${ci.duration},setpts=PTS-STARTPTS,fps=fps=${fps},settb=AVTB,${vf},setsar=1[nv${i}]`)
-          if (ci.muted) {
-            normFilters.push(`aevalsrc=0:c=stereo:s=44100:d=${ci.duration}[na${i}]`)
-          } else {
-            normFilters.push(`[${i}:a]atrim=start=${ci.trimIn}:duration=${ci.duration},asetpts=PTS-STARTPTS,aresample=44100[na${i}]`)
-          }
+          videoNormFilters.push(`[${i}:v]trim=start=${ci.trimIn}:duration=${ci.duration},setpts=PTS-STARTPTS,fps=fps=${fps},settb=AVTB,${vf},setsar=1[nv${i}]`)
+          audioNormFilters.push(ci.muted
+            ? `aevalsrc=0:c=stereo:s=44100:d=${ci.duration}[na${i}]`
+            : `[${i}:a]atrim=start=${ci.trimIn}:duration=${ci.duration},asetpts=PTS-STARTPTS,aresample=44100[na${i}]`
+          )
         }
       }
 
@@ -262,7 +263,13 @@ export async function runPipeline({
       let cumDur = 0
       let cumTrans = 0
       for (let i = 0; i < sortedClips.length - 1; i++) {
-        const t = getTransition(i)
+        const raw = getTransition(i)
+        const maxDur = Math.min(
+          1.5,
+          sortedClips[i].duration / 2,
+          sortedClips[i + 1].duration / 2,
+        )
+        const t = { ...raw, duration: Math.min(raw.duration, maxDur) }
         cumDur += sortedClips[i].duration
         const offset = Math.max(0, cumDur - cumTrans - t.duration)
         cumTrans += t.duration
@@ -278,17 +285,49 @@ export async function runPipeline({
       expectedDuration = Math.max(0.1, cumDur + sortedClips[sortedClips.length - 1].duration - cumTrans)
       setProgress("Encoding… 0%")
 
+      const videoInputs = sortedClips.flatMap((_, i) => ["-i", `input${i}.mp4`])
+
       if (sortedAudio.length === 0) {
-        const { filters: fcFilters, mapLabel } = applyTextToFc([...normFilters, ...vFilters, ...aFilters], "[outv]")
-        await ffmpeg.exec([...inputs, "-filter_complex", fcFilters.join(";"), "-map", `[${mapLabel}]`, "-map", "[outa]", ...codecArgs, outputFile])
+        const { filters: fcFilters, mapLabel } = applyTextToFc([...videoNormFilters, ...vFilters, ...aFilters], "[outv]")
+        await ffmpeg.exec([...videoInputs, "-filter_complex", fcFilters.join(";"), "-map", `[${mapLabel}]`, "-map", "[outa]", ...codecArgs, outputFile])
       } else {
-        const audioTrackFilters = sortedAudio.map((ac, i) =>
-          `[${audioOffset + i}:a]atrim=start=${ac.trimIn}:duration=${ac.duration},asetpts=PTS-STARTPTS,adelay=${Math.round(ac.startTime * 1000)}:all=1,aresample=44100[at${i}]`
+        // Two-pass workaround: xfade + amix in one filter_complex deadlocks in single-threaded
+        // WASM because the muxer's audio queue fills while xfade buffers clip 0 frames.
+        // Pass 1 — video only (no circular audio/video dependency):
+        const { filters: pass1Filters, mapLabel: videoLabel } = applyTextToFc([...videoNormFilters, ...vFilters], "[outv]")
+        await ffmpeg.exec([
+          ...videoInputs,
+          "-filter_complex", pass1Filters.join(";"),
+          "-map", `[${videoLabel}]`,
+          "-an",
+          ...codecArgs,
+          "temp_pass1.mkv",
+        ])
+
+        // Pass 2 — audio only, then mux with the encoded video (copy):
+        // Input layout: [0]=temp_pass1.mkv, [1..N]=original video files, [N+1..]=audio files
+        setProgress("Mixing audio…")
+        const pass2AudioNorm = audioNormFilters.map((f) =>
+          f.replace(/\[(\d+):a\]/g, (_, n) => `[${parseInt(n) + 1}:a]`)
         )
-        const mixInputs = ["[outa]", ...sortedAudio.map((_, i) => `[at${i}]`)].join("")
-        const mixFilter = `${mixInputs}amix=inputs=${1 + sortedAudio.length}:normalize=0[finala]`
-        const { filters: fcFilters, mapLabel } = applyTextToFc([...normFilters, ...vFilters, ...aFilters, ...audioTrackFilters, mixFilter], "[outv]")
-        await ffmpeg.exec([...inputs, "-filter_complex", fcFilters.join(";"), "-map", `[${mapLabel}]`, "-map", "[finala]", ...codecArgs, outputFile])
+        const extOffset = 1 + sortedClips.length
+        const externalAudioFilters = sortedAudio.map((ac, i) =>
+          `[${extOffset + i}:a]atrim=start=${ac.trimIn}:duration=${ac.duration},asetpts=PTS-STARTPTS,adelay=${Math.round(ac.startTime * 1000)}:all=1,aresample=44100[at${i}]`
+        )
+        const mixInputLabels = ["[outa]", ...sortedAudio.map((_, i) => `[at${i}]`)].join("")
+        const mixFilter = `${mixInputLabels}amix=inputs=${1 + sortedAudio.length}:normalize=0[finala]`
+
+        await ffmpeg.exec([
+          "-i", "temp_pass1.mkv",
+          ...videoInputs,
+          ...sortedAudio.flatMap((_, i) => ["-i", `audio${i}`]),
+          "-filter_complex", [...pass2AudioNorm, ...aFilters, ...externalAudioFilters, mixFilter].join(";"),
+          "-map", "0:v",
+          "-map", "[finala]",
+          "-c:v", "copy",
+          "-c:a", "aac",
+          outputFile,
+        ])
       }
     }
 
@@ -296,6 +335,6 @@ export async function runPipeline({
     const data = await ffmpeg.readFile(outputFile) as Uint8Array
     return new Blob([data], { type: mime })
   } finally {
-    // ffmpeg instance is discarded after each run; worker is GC'd
+    try { ffmpeg.terminate() } catch { /* worker already gone */ }
   }
 }
