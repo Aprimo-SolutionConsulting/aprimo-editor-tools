@@ -43,6 +43,11 @@ export function Navbar() {
                 Excel Import
               </Link>
             )}
+            {isConnected && (
+              <Link href="/video-studio" className="text-muted-foreground hover:text-foreground transition-colors">
+                Video Studio
+              </Link>
+            )}
             {isConnected ? (
               <Badge variant="outline" className="flex items-center gap-1.5 border-success text-success">
                 <Wifi className="h-3 w-3" />

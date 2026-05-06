@@ -55,6 +55,23 @@ Webhook action: `videoresizer` with `&mode=singleitem` appended to the webhook U
 
 > FFmpeg.wasm requires `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: credentialless` response headers on the `/video-resizer` route. These are already configured in `next.config.mjs`.
 
+### Video Studio
+
+A browser-based non-linear video editor. Select multiple Aprimo assets, arrange them on a timeline, add transitions, audio, and text overlays, then render the final video using FFmpeg.wasm.
+
+- Select multiple video, image, and audio assets directly from Aprimo using the content selector
+- Drag assets onto a four-track timeline: Video, Transitions, Audio, and Text
+- Trim video clips and set image hold durations
+- Add xfade transitions between clips (fade, wipe, slide, dissolve, and more)
+- Overlay audio tracks with independent trim and crop-to-video controls
+- Create text overlay assets with configurable font, size, color, opacity, and position
+- Generate a preview at 360p, 720p, or 1080p before final render
+- Produce the final video and upload it back to Aprimo as a new rendition
+- Output formats: MP4, MOV, WebM
+- Output size presets for General use, Instagram, YouTube, TikTok, Facebook, LinkedIn, and X
+
+> FFmpeg.wasm requires `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: credentialless` response headers on the `/video-studio` route. These are already configured in `next.config.mjs`.
+
 ### Excel Import
 
 Import metadata from an Excel file into Aprimo records.
