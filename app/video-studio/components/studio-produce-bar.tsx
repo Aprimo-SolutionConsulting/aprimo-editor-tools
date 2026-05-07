@@ -1,6 +1,6 @@
 "use client"
 
-import { Loader2, Braces, Download, ExternalLink } from "lucide-react"
+import { Loader2, Braces, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
@@ -70,12 +70,11 @@ export function StudioProduceBar({
             disabled={isBusy || sortedClips.length === 0}
           >
             {downloading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-            {downloading ? "Creating…" : "Create and Download"}
+            {downloading ? "Creating…" : "Create & Download"}
           </Button>
           {savedRecordUrl && !isBusy && (
-            <Button size="sm" variant="outline" onClick={() => window.open(savedRecordUrl, "_blank")}>
-              <ExternalLink className="h-3.5 w-3.5" />
-              Open in Aprimo
+            <Button size="sm" variant="outline" onClick={() => { window.location.href = savedRecordUrl }}>
+              Open Asset
             </Button>
           )}
           <Button

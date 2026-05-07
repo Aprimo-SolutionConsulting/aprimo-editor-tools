@@ -312,6 +312,7 @@ export function AprimoConfigDialog() {
               {SHOW_VS_SECTION && (
                 <div className="border-t border-border pt-4 space-y-4">
                   <p className="text-xs font-medium text-muted-foreground">Video Studio — Save as Asset</p>
+                  <p className="text-xs text-muted-foreground">These settings are shared across all connection profiles.</p>
                   {(!ENV_VS_CONTENT_TYPE || !ENV_VS_JSON_FIELD) && (
                     <div className="grid grid-cols-2 gap-3">
                       {!ENV_VS_CONTENT_TYPE && (

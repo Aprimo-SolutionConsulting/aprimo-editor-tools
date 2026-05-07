@@ -34,6 +34,14 @@ export function Navbar() {
                 Video Studio
               </Link>
             )}
+            {isConnected && connection?.environment && (
+              <a
+                href={`https://${connection.environment}.dam.aprimo.com/dam`}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Aprimo Home
+              </a>
+            )}
             {isConnected ? (
               <Badge variant="outline" className="flex items-center gap-1.5 border-success text-success">
                 <Wifi className="h-3 w-3" />

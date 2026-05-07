@@ -3,12 +3,12 @@
 import { Navbar } from "@/components/navbar"
 import { Footer } from "@/components/footer"
 import { Button } from "@/components/ui/button"
-import { FileSpreadsheet, Upload, Clapperboard } from "lucide-react"
+import { FileSpreadsheet, Upload, Clapperboard, House } from "lucide-react"
 import Link from "next/link"
 import { useAprimo } from "@/context/aprimo-context"
 
 export default function Home() {
-  const { isConnected } = useAprimo()
+  const { isConnected, connection } = useAprimo()
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -30,6 +30,28 @@ export default function Home() {
           )}
           {isConnected && (
             <div className="grid gap-4 sm:grid-cols-2">
+              <a href={`https://${connection?.environment}.dam.aprimo.com/dam`}>
+                <div className="border border-border rounded-lg p-6 text-left hover:bg-muted/50 transition-colors cursor-pointer">
+                  <div className="flex items-center gap-3 mb-2">
+                    <House className="h-5 w-5 text-primary" />
+                    <h2 className="text-lg font-semibold">Aprimo Home</h2>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Go to the Spaces page for your Aprimo environment.
+                  </p>
+                </div>
+              </a>
+              <Link href="/video-studio">
+                <div className="border border-border rounded-lg p-6 text-left hover:bg-muted/50 transition-colors cursor-pointer">
+                  <div className="flex items-center gap-3 mb-2">
+                    <Clapperboard className="h-5 w-5 text-primary" />
+                    <h2 className="text-lg font-semibold">Video Studio</h2>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Select assets from Aprimo and generate a video.
+                  </p>
+                </div>
+              </Link>
               <Link href="/bulk-upload">
                 <div className="border border-border rounded-lg p-6 text-left hover:bg-muted/50 transition-colors cursor-pointer">
                   <div className="flex items-center gap-3 mb-2">
@@ -49,17 +71,6 @@ export default function Home() {
                   </div>
                   <p className="text-sm text-muted-foreground">
                     Import records into Aprimo from an Excel spreadsheet.
-                  </p>
-                </div>
-              </Link>
-              <Link href="/video-studio">
-                <div className="border border-border rounded-lg p-6 text-left hover:bg-muted/50 transition-colors cursor-pointer">
-                  <div className="flex items-center gap-3 mb-2">
-                    <Clapperboard className="h-5 w-5 text-primary" />
-                    <h2 className="text-lg font-semibold">Video Studio</h2>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    Select assets from Aprimo and generate a video.
                   </p>
                 </div>
               </Link>
