@@ -21,7 +21,7 @@ export function Navbar() {
       <div className="border-b border-border px-6">
         <div className="flex items-center justify-between h-20">
           <Link href="/" className="py-2">
-            <Image src="/images/aprimo-extensions-logo-sm.png" alt="Aprimo Extensions" width={0} height={0} style={{ width: 160, height: "auto" }} />
+            <Image src="/images/aprimo-extensions-logo-sm.png" alt="Aprimo Extensions" width={0} height={0} style={{ width: 160, height: "auto" }} loading="eager" priority />
           </Link>
 
           <div className="flex items-center gap-6 text-sm">
