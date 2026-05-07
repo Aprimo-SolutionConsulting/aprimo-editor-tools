@@ -312,7 +312,7 @@ export async function runPipeline({
       const videoInputs = sortedClips.flatMap((_, i) => ["-i", `input${i}.mp4`])
 
       if (sortedAudio.length === 0) {
-        const { filters: fcFilters, mapLabel } = applyTextToFc([...videoNormFilters, ...vFilters, ...aFilters], "[outv]")
+        const { filters: fcFilters, mapLabel } = applyTextToFc([...videoNormFilters, ...audioNormFilters, ...vFilters, ...aFilters], "[outv]")
         await ffmpeg.exec([...videoInputs, "-filter_complex", fcFilters.join(";"), "-map", `[${mapLabel}]`, "-map", "[outa]", ...codecArgs, outputFile])
       } else {
         // Two-pass workaround: xfade + amix in one filter_complex deadlocks in single-threaded

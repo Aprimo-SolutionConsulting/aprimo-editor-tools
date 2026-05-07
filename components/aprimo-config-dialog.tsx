@@ -34,6 +34,7 @@ interface ConnectionProfile {
 }
 
 const PROFILES_KEY = "aprimo_profiles"
+const LAST_PROFILE_KEY = "aprimo_last_profile_id"
 
 function loadProfiles(): ConnectionProfile[] {
   try {
@@ -123,18 +124,19 @@ export function AprimoConfigDialog() {
 
     const loaded = loadProfiles()
     setProfiles(loaded)
-    if (loaded.length === 1) {
-      startOAuth(loaded[0].environment, loaded[0].clientId, loaded[0].clientSecret)
-    } else if (loaded.length > 1) {
-      setView("list")
-      setOpen(true)
-    } else {
+    if (loaded.length === 0) {
       setView("edit")
       setOpen(true)
+    } else {
+      const lastId = localStorage.getItem(LAST_PROFILE_KEY)
+      const profile = (lastId ? loaded.find((p) => p.id === lastId) : null) ?? loaded[0]
+      localStorage.setItem(LAST_PROFILE_KEY, profile.id)
+      startOAuth(profile.environment, profile.clientId, profile.clientSecret)
     }
   }, [isConnected])
 
   function connectProfile(profile: ConnectionProfile) {
+    localStorage.setItem(LAST_PROFILE_KEY, profile.id)
     setOpen(false)
     startOAuth(profile.environment, profile.clientId, profile.clientSecret)
   }
@@ -201,6 +203,7 @@ export function AprimoConfigDialog() {
       : [...profiles, profile]
     persistProfiles(updated)
     persistVsFields()
+    localStorage.setItem(LAST_PROFILE_KEY, profile.id)
     setOpen(false)
     startOAuth(profile.environment, profile.clientId, profile.clientSecret)
   }
