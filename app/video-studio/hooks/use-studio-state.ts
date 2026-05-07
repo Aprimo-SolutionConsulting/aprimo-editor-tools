@@ -194,7 +194,7 @@ export function useStudioState({ recordParam, basketParam }: { recordParam: stri
       setPendingBasketAssets(
         records.map((r) => ({
           id: r.id,
-          title: r.title ?? r.id,
+          title: r.title ?? r._embedded?.masterfilelatestversion?.fileName ?? r.id,
           thumbnailUrl: r._embedded?.masterfilelatestversion?._embedded?.thumbnail?.uri ?? null,
         }))
       )
