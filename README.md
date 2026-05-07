@@ -126,6 +126,15 @@ NEXT_PUBLIC_ASSOCIATED_ASSETS_RECORD_LINK_FIELD=    # RecordLink field name used
 
 If any of these variables are not set via the environment they can be entered in the **Connect** modal instead.
 
+**Webhook actions**
+
+Video Studio supports two webhook action modes:
+
+| Action | Mode | Description |
+|--------|------|-------------|
+| `videostudiobasket` | Multi-record (default) | Select one or more assets in Aprimo and open Video Studio with those assets pre-loaded in the sidebar, ready to arrange on the timeline. |
+| `videostudio` | Single-record (`&mode=singleitem`) | Open an existing Video Studio project record so you can edit it and save a new version. The project state stored in the JSON field is restored automatically. |
+
 > FFmpeg.wasm requires `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: credentialless` response headers on the `/video-studio` route. These are already configured in `next.config.mjs`.
 
 ### Excel Import
@@ -143,16 +152,19 @@ Import metadata from an Excel file into Aprimo records.
 1. **Pagehook trigger** — The Aprimo UI sends a page hook POST to the Webhook Endpoint containing the action name and one or more record IDs.
 2. **Store basket** — For multi-record actions the Webhook Endpoint stores the record list in the Basket Datastore (Supabase) and generates a short-lived `requestId` handle.
 3. **Redirect** — The webhook returns the Editor Tools URL with the handle (or record ID for single-item mode). Aprimo opens that URL in the user's browser.
-4. **Retrieve basket** — The Editor Tools page fetches the record list from the Basket Datastore using the `requestId`, then deletes the row.
-5. **PKCE auth** — Editor Tools authenticates the user against the Aprimo User Interface via PKCE OAuth / SSO before making any API calls.
+4. **PKCE auth** — Editor Tools automatically authenticates the user against the Aprimo User Interface via PKCE OAuth / SSO on page load, before making any API calls.
+5. **Retrieve basket** — Once authenticated, the Editor Tools page fetches the record list from the Basket Datastore using the `requestId`, then deletes the row.
 
 ## Framework
 
 ### Authentication
 
-Connects to Aprimo using the PKCE OAuth flow via the [Aprimo JS SDK](https://github.com/Timw255/aprimo-js). Credentials are stored in `localStorage` after first use.
+Connects to Aprimo using the PKCE OAuth flow via the [Aprimo JS SDK](https://github.com/Timw255/aprimo-js). Connection profiles are saved in `localStorage` after first use.
 
-Connection can be pre-configured via environment variables so the modal is skipped entirely:
+The app authenticates automatically on page load:
+
+- **With all three env vars set** — auto-connects on every page, no modal required.
+- **Without env vars** — auto-connects on every page except the home page using the saved profile. If multiple profiles exist the selection modal is shown; if none exist the add-profile form is shown.
 
 ```
 NEXT_PUBLIC_APRIMO_ENVIRONMENT=yourcompany
@@ -160,17 +172,17 @@ NEXT_PUBLIC_APRIMO_CLIENT_ID=your-client-id
 NEXT_PUBLIC_APRIMO_CLIENT_SECRET=your-client-secret
 ```
 
-If any variable is missing the app falls back to the connection modal.
-
 ### Webhook / Page Hook endpoint
 
 `POST /api/webhook` receives page hook calls from Aprimo and redirects to the appropriate page. Actions are configured in `app/api/webhook/actions.json`:
 
 ```json
 {
-  "mybasket":     "https://your-deployment.vercel.app/my-basket",
-  "myitem":       "https://your-deployment.vercel.app/my-item",
-  "videoresizer": "https://your-deployment.vercel.app/video-resizer"
+  "mybasket":           "https://your-deployment.vercel.app/my-basket",
+  "myitem":             "https://your-deployment.vercel.app/my-item",
+  "videoresizer":       "https://your-deployment.vercel.app/video-resizer",
+  "videostudiobasket":  "https://your-deployment.vercel.app/video-studio",
+  "videostudio":        "https://your-deployment.vercel.app/video-studio"
 }
 ```
 
@@ -191,7 +203,7 @@ The My Basket flow stores temporary record lists in Supabase.
 Copy `.env.local.example` to `.env.local` and fill in the values:
 
 ```
-# Supabase (required for My Basket)
+# Supabase (required for My Basket and Video Studio basket)
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 
@@ -226,7 +238,7 @@ This app requires a **PKCE OAuth registration** in your Aprimo environment.
 
 ### 5. Register page hooks (optional)
 
-To enable the My Basket and My Item flows, register page hooks in Aprimo pointing to `/api/webhook`. Add your action-to-URL mappings in [`app/api/webhook/actions.json`](app/api/webhook/actions.json).
+To enable the My Basket, My Item, and Video Studio flows, register page hooks in Aprimo pointing to `/api/webhook`. Add your action-to-URL mappings in [`app/api/webhook/actions.json`](app/api/webhook/actions.json).
 
 ### 6. Set up action definitions and menus in Aprimo (optional)
 

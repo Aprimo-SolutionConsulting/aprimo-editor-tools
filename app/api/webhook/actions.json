@@ -12,8 +12,4 @@
   "videoresizerlocal": "http://localhost:3000/video-resizer",
   "videostudiolocal": "http://localhost:3000/video-studio",
   "videostudiobasket": "https://aprimo-editor-tools.vercel.app/video-studio"
-
-  /* There are two actions for videostudio.  One allows you to select items in your 
-  basket and open video-studio with those assets.  The other opens a video already 
-  created so you can create a new version of it. */
 }
