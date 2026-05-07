@@ -16,19 +16,17 @@ function OAuthCallbackContent() {
     const handleCallback = async () => {
       const code = searchParams.get("code")
       const errorParam = searchParams.get("error")
-
       const returnUrl = sessionStorage.getItem("pkce_return_url") ?? "/"
-      const failUrl = `${returnUrl}${returnUrl.includes("?") ? "&" : "?"}auth_failed=1`
 
       if (errorParam) {
         toast.error(`Authorization denied: ${errorParam}`)
-        router.push(failUrl)
+        router.push(returnUrl)
         return
       }
 
       if (!code) {
         toast.error("No authorization code received")
-        router.push(failUrl)
+        router.push(returnUrl)
         return
       }
 
@@ -39,7 +37,7 @@ function OAuthCallbackContent() {
 
       if (!environment || !clientId || !codeVerifier) {
         toast.error("Missing session data — please try connecting again")
-        router.push(failUrl)
+        router.push(returnUrl)
         return
       }
 
@@ -65,7 +63,7 @@ function OAuthCallbackContent() {
       } catch (err) {
         console.error("Token exchange error:", err)
         toast.error("Authentication failed — please check your credentials")
-        router.push(failUrl)
+        router.push(returnUrl)
       }
     }
 

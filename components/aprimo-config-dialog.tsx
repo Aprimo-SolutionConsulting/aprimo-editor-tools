@@ -92,7 +92,6 @@ export function AprimoConfigDialog() {
   const [formVsClassificationId, setFormVsClassificationId] = useState("")
   const [formVsJsonField, setFormVsJsonField] = useState("")
   const [formAssociatedAssetsField, setFormAssociatedAssetsField] = useState("")
-  const [authFailed, setAuthFailed] = useState(false)
   const hasAttempted = useRef(false)
 
   function openDialog() {
@@ -111,28 +110,25 @@ export function AprimoConfigDialog() {
   useEffect(() => {
     if (isConnected) return
     if (window.location.pathname.startsWith("/oauth")) return
-
-    const params = new URLSearchParams(window.location.search)
-    if (params.get("auth_failed") === "1") {
-      params.delete("auth_failed")
-      const newSearch = params.toString()
-      history.replaceState(null, "", window.location.pathname + (newSearch ? `?${newSearch}` : ""))
-      setAuthFailed(true)
-      openDialog()
-      return
-    }
-
     if (hasAttempted.current) return
-    hasAttempted.current = true
 
     if (ALL_FROM_ENV) {
+      hasAttempted.current = true
       startOAuth(ENV_ENVIRONMENT, ENV_CLIENT_ID, ENV_CLIENT_SECRET)
       return
     }
 
+    if (window.location.pathname === "/") return
+    hasAttempted.current = true
+
     const loaded = loadProfiles()
     setProfiles(loaded)
-    if (loaded.length === 0) {
+    if (loaded.length === 1) {
+      startOAuth(loaded[0].environment, loaded[0].clientId, loaded[0].clientSecret)
+    } else if (loaded.length > 1) {
+      setView("list")
+      setOpen(true)
+    } else {
       setView("edit")
       setOpen(true)
     }
@@ -217,28 +213,6 @@ export function AprimoConfigDialog() {
 
   const formValid = !!(formEnvironment.trim() && formClientId.trim())
 
-  if (ALL_FROM_ENV && !authFailed) {
-    return (
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Aprimo Configuration</DialogTitle>
-            <DialogDescription>Connection is pre-configured via environment variables.</DialogDescription>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">Environment: <span className="font-mono">{ENV_ENVIRONMENT}</span></p>
-          <DialogFooter className="flex-col sm:flex-row gap-2">
-            <Button variant="outline" className="sm:mr-auto" onClick={() => { setAuthFailed(true); openNew() }}>
-              Use different credentials
-            </Button>
-            <Button onClick={() => { setOpen(false); startOAuth(ENV_ENVIRONMENT, ENV_CLIENT_ID, ENV_CLIENT_SECRET) }}>
-              Connect
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    )
-  }
-
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent>
@@ -289,12 +263,6 @@ export function AprimoConfigDialog() {
               <DialogTitle>{editing ? "Edit profile" : "Add profile"}</DialogTitle>
               <DialogDescription>Enter your Aprimo environment and PKCE registration credentials.</DialogDescription>
             </DialogHeader>
-
-            {ALL_FROM_ENV && authFailed && (
-              <p className="text-sm text-destructive rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2">
-                Authentication failed with the credentials set in environment variables. Enter working credentials below to connect.
-              </p>
-            )}
 
             <div className="space-y-4 py-2">
               <div className="space-y-1.5">

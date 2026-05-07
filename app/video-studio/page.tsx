@@ -20,8 +20,9 @@ function VideoStudioContent() {
   const { isConnected, connection } = useAprimo()
   const searchParams = useSearchParams()
   const recordParam = searchParams.get("record")
+  const basketParam = searchParams.get("requestId")
 
-  const s = useStudioState({ recordParam })
+  const s = useStudioState({ recordParam, basketParam })
 
   const {
     produceVideo, producing, produceProgress, savedRecordId, savedRecordUrl,
@@ -96,6 +97,7 @@ function VideoStudioContent() {
             setDraggingTransitionType={s.setDraggingTransitionType}
             isConnected={isConnected}
             connection={connection}
+            pendingBasketAssets={s.pendingBasketAssets}
           />
 
           <StudioPreview

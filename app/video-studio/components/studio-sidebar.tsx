@@ -29,6 +29,7 @@ interface StudioSidebarProps {
   setDraggingTransitionType: (t: string | null) => void
   isConnected: boolean
   connection: { environment: string } | null
+  pendingBasketAssets: { id: string; title: string; thumbnailUrl: string | null }[]
 }
 
 export function StudioSidebar({
@@ -41,6 +42,7 @@ export function StudioSidebar({
   setDraggingTransitionType,
   isConnected,
   connection,
+  pendingBasketAssets,
 }: StudioSidebarProps) {
   const { client } = useAprimo()
   const clientRef = useRef(client)
@@ -73,6 +75,21 @@ export function StudioSidebar({
   }, [textFont])
   const [editingTextId, setEditingTextId] = useState<string | null>(null)
   const downloadedIdsRef = useRef<Set<string>>(new Set())
+  const processedBasketIds = useRef<Set<string>>(new Set())
+
+  useEffect(() => {
+    const unprocessed = pendingBasketAssets.filter((a) => !processedBasketIds.current.has(a.id))
+    if (unprocessed.length === 0) return
+    unprocessed.forEach((a) => {
+      processedBasketIds.current.add(a.id)
+      downloadedIdsRef.current.add(a.id)
+      setAssets((prev) => {
+        if (prev.some((p) => p.id === a.id)) return prev
+        return [...prev, { id: a.id, title: a.title, thumbnailUrl: a.thumbnailUrl, publicLink: null, loading: true, error: null, mediaType: "unknown" as const }]
+      })
+      fetchAssetUrl(a.id, a.title)
+    })
+  }, [pendingBasketAssets])
 
   async function detectMediaTypeFromUrl(url: string): Promise<import("../types").MediaType> {
     try {

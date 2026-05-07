@@ -4,10 +4,11 @@ import { useState, useEffect, useRef } from "react"
 import { toast } from "sonner"
 import { Expander } from "aprimo-js"
 import { useAprimo } from "@/context/aprimo-context"
+import { supabase } from "@/lib/supabase"
 import { PLATFORMS } from "../../video-resizer/constants"
 import { SelectedAsset, VideoClip, TransitionClip, AudioClip, TextClip } from "../types"
 
-export function useStudioState({ recordParam }: { recordParam: string | null }) {
+export function useStudioState({ recordParam, basketParam }: { recordParam: string | null; basketParam: string | null }) {
   const { isConnected, client } = useAprimo()
 
   // Assets
@@ -57,6 +58,10 @@ export function useStudioState({ recordParam }: { recordParam: string | null }) 
   // Record auto-load
   const [loadingRecord, setLoadingRecord] = useState(false)
   const recordLoadedRef = useRef(false)
+
+  // Basket auto-load
+  const [pendingBasketAssets, setPendingBasketAssets] = useState<{ id: string; title: string; thumbnailUrl: string | null }[]>([])
+  const basketLoadedRef = useRef(false)
 
   // ── derived ──────────────────────────────────────────────────────────────────
 
@@ -155,6 +160,52 @@ export function useStudioState({ recordParam }: { recordParam: string | null }) 
       .finally(() => setLoadingRecord(false))
   }, [recordParam, client, isConnected])
 
+  // ── basket auto-load ──────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!basketParam || !client || !isConnected || basketLoadedRef.current) return
+    basketLoadedRef.current = true
+
+    async function loadBasket() {
+      const { data: row } = await supabase
+        .from("requested_records")
+        .select("recordList")
+        .eq("requestId", basketParam)
+        .single()
+      if (!row?.recordList?.length) return
+
+      const ids: string[] = row.recordList
+      const expander = Expander.create()
+      ;(expander.for("record") as any).expand("masterfilelatestversion")
+      ;(expander.for("fileversion") as any).expand("thumbnail")
+
+      const BATCH = 50
+      const batchResults = await Promise.all(
+        Array.from({ length: Math.ceil(ids.length / BATCH) }, (_, i) => ids.slice(i * BATCH, i * BATCH + BATCH))
+          .map((batch) => {
+            const expression = batch.map((id) => `id='${id}'`).join(" OR ")
+            return client!.search.records({ searchExpression: { expression } }, expander)
+          })
+      )
+
+      await supabase.from("requested_records").delete().eq("requestId", basketParam)
+
+      const records = batchResults.flatMap((r) => (r.data as any)?.items ?? []) as any[]
+      setPendingBasketAssets(
+        records.map((r) => ({
+          id: r.id,
+          title: r.title ?? r.id,
+          thumbnailUrl: r._embedded?.masterfilelatestversion?._embedded?.thumbnail?.uri ?? null,
+        }))
+      )
+      toast.success(`${records.length} asset${records.length !== 1 ? "s" : ""} added from basket`)
+    }
+
+    loadBasket().catch((err) =>
+      toast.error(`Failed to load basket: ${err instanceof Error ? err.message : String(err)}`)
+    )
+  }, [basketParam, client, isConnected])
+
   return {
     assets, setAssets,
     durations, setDurations,
@@ -184,5 +235,6 @@ export function useStudioState({ recordParam }: { recordParam: string | null }) 
     trimClip, trimAsset,
     loadState, buildStateJson, handleTrimChange,
     vsSettingsReady, loadingRecord,
+    pendingBasketAssets,
   }
 }
