@@ -29,7 +29,7 @@ interface StudioSidebarProps {
   setDraggingTransitionType: (t: string | null) => void
   isConnected: boolean
   connection: { environment: string } | null
-  pendingBasketAssets: { id: string; title: string; thumbnailUrl: string | null }[]
+  pendingBasketAssets: { id: string; title: string }[]
 }
 
 export function StudioSidebar({
@@ -85,7 +85,7 @@ export function StudioSidebar({
       downloadedIdsRef.current.add(a.id)
       setAssets((prev) => {
         if (prev.some((p) => p.id === a.id)) return prev
-        return [...prev, { id: a.id, title: a.title, thumbnailUrl: a.thumbnailUrl, publicLink: null, loading: true, error: null, mediaType: "unknown" as const }]
+        return [...prev, { id: a.id, title: a.title, thumbnailUrl: null, publicLink: null, loading: true, error: null, mediaType: "unknown" as const }]
       })
       fetchAssetUrl(a.id, a.title)
     })

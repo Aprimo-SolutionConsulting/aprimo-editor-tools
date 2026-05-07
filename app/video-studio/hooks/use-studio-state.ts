@@ -60,7 +60,7 @@ export function useStudioState({ recordParam, basketParam }: { recordParam: stri
   const recordLoadedRef = useRef(false)
 
   // Basket auto-load
-  const [pendingBasketAssets, setPendingBasketAssets] = useState<{ id: string; title: string; thumbnailUrl: string | null }[]>([])
+  const [pendingBasketAssets, setPendingBasketAssets] = useState<{ id: string; title: string }[]>([])
   const basketLoadedRef = useRef(false)
 
   // ── derived ──────────────────────────────────────────────────────────────────
@@ -171,13 +171,12 @@ export function useStudioState({ recordParam, basketParam }: { recordParam: stri
         .from("requested_records")
         .select("recordList")
         .eq("requestId", basketParam)
-        .single()
+        .maybeSingle()
       if (!row?.recordList?.length) return
 
       const ids: string[] = row.recordList
       const expander = Expander.create()
       ;(expander.for("record") as any).expand("masterfilelatestversion")
-      ;(expander.for("fileversion") as any).expand("thumbnail")
 
       const BATCH = 50
       const batchResults = await Promise.all(
@@ -195,7 +194,6 @@ export function useStudioState({ recordParam, basketParam }: { recordParam: stri
         records.map((r) => ({
           id: r.id,
           title: r.title ?? r._embedded?.masterfilelatestversion?.fileName ?? r.id,
-          thumbnailUrl: r._embedded?.masterfilelatestversion?._embedded?.thumbnail?.uri ?? null,
         }))
       )
       toast.success(`${records.length} asset${records.length !== 1 ? "s" : ""} added from basket`)
