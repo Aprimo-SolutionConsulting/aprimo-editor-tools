@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import {
-  Copy, Check, ExternalLink, FolderOpen, X, Clapperboard, Film, Music2, ImageIcon, Type, Loader2,
+  Copy, Check, ExternalLink, FolderOpen, X, Clapperboard, Film, Music2, ImageIcon, Type, Loader2, RefreshCw,
   ArrowUpLeft, ArrowUp, ArrowUpRight,
   ArrowLeft, ArrowRight,
   ArrowDownLeft, ArrowDown, ArrowDownRight,
@@ -186,21 +186,24 @@ export function StudioSidebar({
     setTimeout(() => setCopiedId((id) => (id === asset.id ? null : id)), 2000)
   }
 
-  async function copyAllLinks() {
-    const links = assets.filter((a) => a.publicLink).map((a) => a.publicLink).join("\n")
-    if (!links) return
-    await navigator.clipboard.writeText(links)
-    toast.success("All links copied")
-  }
-
   function removeAsset(id: string) {
     setAssets((prev) => prev.filter((a) => a.id !== id))
   }
 
-  const readyCount = assets.filter((a) => a.publicLink).length
+  function refreshAssets() {
+    const aprimoAssets = assets.filter((a) => a.mediaType !== "text")
+    if (aprimoAssets.length === 0) return
+    setAssets((prev) => prev.map((a) =>
+      a.mediaType !== "text" ? { ...a, loading: true, publicLink: null, error: null } : a
+    ))
+    aprimoAssets.forEach((a) => fetchAssetUrl(a.id, a.title))
+  }
+
+  const aprimoAssetCount = assets.filter((a) => a.mediaType !== "text").length
+  const anyLoading = assets.some((a) => a.loading)
 
   return (
-    <div className="w-60 shrink-0 border-r border-border flex flex-col">
+    <div className="w-72 shrink-0 border-r border-border flex flex-col">
       <div className="flex border-b border-border shrink-0">
         <button
           onClick={() => setSidebarTab("assets")}
@@ -219,24 +222,19 @@ export function StudioSidebar({
       {sidebarTab === "assets" && (
         <>
           <div className="flex items-center justify-between px-3 py-1.5 border-b border-border shrink-0">
-            <div className="flex items-center gap-1 ml-auto">
-              {readyCount > 1 && (
-                <Button variant="ghost" size="sm" className="h-6 w-6 p-0" title="Copy all links" onClick={copyAllLinks}>
-                  <Copy className="h-3 w-3" />
-                </Button>
-              )}
-              {assets.length > 0 && (
-                <Button variant="ghost" size="sm" className="h-6 text-xs px-2" onClick={() => setAssets([])}>
-                  Clear
-                </Button>
-              )}
+            {aprimoAssetCount > 0 ? (
+              <Button variant="ghost" size="sm" className="h-6 w-6 p-0" title="Refresh asset URLs" onClick={refreshAssets} disabled={anyLoading}>
+                <RefreshCw className="h-3 w-3" />
+              </Button>
+            ) : <div />}
+            <div className="flex items-center gap-1">
               <Button variant="outline" size="sm" className="h-6 text-xs px-2" onClick={() => { setTextDialogOpen(true); setEditingTextId(null); setTextHeading(""); setHeadingSize(48); setTextBody(""); setTextSize(32); setTextColor("#ffffff"); setTextPosition("middle-center"); setTextFont(TEXT_FONTS[0].value); setTextOpacity(100) }}>
                 <Type className="h-3 w-3" />
-                Text
+                Add Text
               </Button>
               <Button size="sm" className="h-6 text-xs px-2" onClick={openSelector} disabled={!isConnected}>
                 <FolderOpen className="h-3 w-3" />
-                Add
+                Add Assets
               </Button>
             </div>
           </div>
