@@ -1,17 +1,11 @@
 "use client"
 
-import { Wifi, WifiOff } from "lucide-react"
+import { Wifi, WifiOff, Settings } from "lucide-react"
 import Link from "next/link"
 import { useAprimo } from "@/context/aprimo-context"
 import { Badge } from "@/components/ui/badge"
 import { PageHeader } from "@/components/page-header"
 import Image from "next/image"
-
-const ALL_FROM_ENV = !!(
-  process.env.NEXT_PUBLIC_APRIMO_ENVIRONMENT &&
-  process.env.NEXT_PUBLIC_APRIMO_CLIENT_ID &&
-  process.env.NEXT_PUBLIC_APRIMO_CLIENT_SECRET
-)
 
 export function Navbar() {
   const { isConnected, connection } = useAprimo()
@@ -25,14 +19,6 @@ export function Navbar() {
           </Link>
 
           <div className="flex items-center gap-6 text-sm">
-            {!ALL_FROM_ENV && (
-              <button
-                onClick={() => window.dispatchEvent(new Event("aprimo:open-config"))}
-                className="text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Connect
-              </button>
-            )}
             {isConnected && (
               <Link href="/bulk-upload" className="text-muted-foreground hover:text-foreground transition-colors">
                 Bulk Upload
@@ -59,6 +45,13 @@ export function Navbar() {
                 Disconnected
               </Badge>
             )}
+            <button
+              onClick={() => window.dispatchEvent(new Event("aprimo:open-config"))}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+              title="Connections"
+            >
+              <Settings className="h-4 w-4" />
+            </button>
           </div>
         </div>
       </div>

@@ -46,7 +46,7 @@ export default function RootLayout({
           <AprimoSettingsBar />
           {children}
         </AprimoProvider>
-        <Toaster position="top-right" richColors />
+        <Toaster position="top-right" richColors offset="88px" />
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>
