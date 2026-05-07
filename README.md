@@ -108,15 +108,23 @@ Choose a platform preset (YouTube, Instagram, TikTok, Facebook, LinkedIn, X, or 
 
 **Save as Asset — environment variables**
 
-The "Save as Asset" action requires three additional env vars (see `.env.local.example`):
+The "Save as Asset" action requires additional env vars (see `.env.local.example`):
 
 ```
-NEXT_PUBLIC_VIDEO_STUDIO_CONTENT_TYPE=       # content type name or ID for the new record
-NEXT_PUBLIC_VIDEO_STUDIO_CLASSIFICATION_ID=  # classification ID (Aprimo records require at least one)
-NEXT_PUBLIC_VIDEO_STUDIO_JSON_FIELD=         # field name used to store the project state JSON
+NEXT_PUBLIC_VIDEO_STUDIO_CONTENT_TYPE=              # content type name or ID for the new record
+NEXT_PUBLIC_VIDEO_STUDIO_CLASSIFICATION_ID=         # classification ID (Aprimo records require at least one)
+NEXT_PUBLIC_VIDEO_STUDIO_JSON_FIELD=                # field name used to store the project state JSON
+NEXT_PUBLIC_ASSOCIATED_ASSETS_RECORD_LINK_FIELD=    # RecordLink field name used to link the source assets
 ```
 
-The full project state JSON (clips, assets, output settings) is written to the configured field so the project can be reloaded later using the **Load** button.
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `NEXT_PUBLIC_VIDEO_STUDIO_CONTENT_TYPE` | Yes | Content type name or ID assigned to the saved video record |
+| `NEXT_PUBLIC_VIDEO_STUDIO_CLASSIFICATION_ID` | Yes | Classification ID — Aprimo records require at least one |
+| `NEXT_PUBLIC_VIDEO_STUDIO_JSON_FIELD` | Yes | Name of a JSON field; the full project state (clips, assets, settings) is written here so the project can be reloaded via the **Load** button |
+| `NEXT_PUBLIC_ASSOCIATED_ASSETS_RECORD_LINK_FIELD` | No | Name of a RecordLink field on the video record; all Aprimo assets used in the project (video, image, audio) are written as linked records when the video is saved or updated |
+
+If any of these variables are not set via the environment they can be entered in the **Connect** modal instead.
 
 > FFmpeg.wasm requires `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: credentialless` response headers on the `/video-studio` route. These are already configured in `next.config.mjs`.
 
@@ -193,9 +201,10 @@ NEXT_PUBLIC_APRIMO_CLIENT_ID=your-client-id
 NEXT_PUBLIC_APRIMO_CLIENT_SECRET=your-client-secret
 
 # Video Studio — Save as Asset (optional — only required if using that feature)
-NEXT_PUBLIC_VIDEO_STUDIO_CONTENT_TYPE=       # content type name or ID for new records
-NEXT_PUBLIC_VIDEO_STUDIO_CLASSIFICATION_ID=  # classification ID (records require at least one)
-NEXT_PUBLIC_VIDEO_STUDIO_JSON_FIELD=         # field name used to store project state JSON
+NEXT_PUBLIC_VIDEO_STUDIO_CONTENT_TYPE=              # content type name or ID for new records
+NEXT_PUBLIC_VIDEO_STUDIO_CLASSIFICATION_ID=         # classification ID (records require at least one)
+NEXT_PUBLIC_VIDEO_STUDIO_JSON_FIELD=                # field name used to store project state JSON
+NEXT_PUBLIC_ASSOCIATED_ASSETS_RECORD_LINK_FIELD=    # RecordLink field to link source assets (optional)
 ```
 
 ### 3. Install and run
